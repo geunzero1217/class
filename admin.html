@@ -32,6 +32,11 @@
       <div class="addr" id="addr" style="margin-top:10px"></div>
     </div>
 
+    <div class="card">
+      <div class="row"><span class="sec-title">자리 모니터 주소</span><span class="small muted">자리마다 둔 모니터(노트북)에 선생님 화면만 꽉 차게 띄워요. 출석과는 상관없어요.</span></div>
+      <div id="disp" style="margin-top:10px"></div>
+    </div>
+
     <div class="admin-grid">
       <div class="card">
         <span class="sec-title">반 목록</span>
@@ -54,7 +59,7 @@
 <script type="module">
 import {
   auth, r, get, set, update, remove, push, onValue, serverTimestamp, waitAuth, googleLogin, ensureTeacher, signOut,
-  skey, normName, classLessons, openLesson, closeLesson, deleteLesson, deleteClass, attRows, STATUS, uploadDeck, deleteDeck, PERIODS,
+  skey, normName, newDisplayKey, classLessons, openLesson, closeLesson, deleteLesson, deleteClass, attRows, STATUS, uploadDeck, deleteDeck, PERIODS,
 } from './js/fb.js';
 
 const stBadge = (s) => `<span class="st st-${s}">${STATUS[s]}</span>`;
@@ -89,6 +94,55 @@ function enter(user) {
   $('#copyAddr').onclick = () => { navigator.clipboard.writeText(SITE_BASE); toast('복사했어요.'); };
   $('#qrAddr').onclick = () => showQr(SITE_BASE);
   onValue(r('classes'), (s) => { classes = s.val() || {}; renderClasses(); });
+  onValue(r('displayKey'), (s) => renderDisplay(s.val()));
+}
+
+/* 자리 모니터 주소 + 바탕화면 아이콘(.bat) */
+const viewUrl = (k) => `${SITE_BASE}/view.html?k=${k}`;
+function renderDisplay(k) {
+  if (!k) {
+    $('#disp').innerHTML = `<button class="primary" id="dispMake">${ic('plus')}자리 모니터 주소 만들기</button>`;
+    $('#dispMake').onclick = () => newDisplayKey().catch((e) => alert(e.message));
+    return;
+  }
+  const url = viewUrl(k);
+  $('#disp').innerHTML = `
+    <div class="row"><span class="u" style="flex:1;font-weight:500;font-size:13px">${esc(url)}</span>
+      <button id="dispCopy">${ic('copy')}복사</button>
+      <button class="primary" id="dispBat">${ic('download')}바탕화면 아이콘 받기</button></div>
+    <div class="small muted" style="margin-top:10px;line-height:1.7">
+      ① 자리 노트북마다 <b>바탕화면 아이콘 받기</b>로 받은 파일을 바탕화면에 두세요. 누르면 크롬이 전체 화면으로 열려요. (끌 때: <b>Alt + F4</b>)<br>
+      ② 처음 실행할 때 "Windows의 PC 보호" 창이 뜨면 <b>추가 정보 → 실행</b>을 누르세요.<br>
+      ③ 노트북도 <b>학교 와이파이</b>에 연결하고, 덮개를 닫아도 꺼지지 않게 전원 설정을 바꿔 두세요.<br>
+      ④ 선생님이 수업을 열면 자리 모니터가 그 수업으로 자동으로 바뀌어요.
+    </div>
+    <div style="margin-top:10px"><button class="small danger" id="dispNew">주소 새로 만들기 (예전 주소·아이콘은 안 열림)</button></div>`;
+  $('#dispCopy').onclick = () => { navigator.clipboard.writeText(url); toast('복사했어요.'); };
+  $('#dispBat').onclick = () => downloadBat(url);
+  $('#dispNew').onclick = async () => {
+    if (!confirm('자리 모니터 주소를 새로 만들까요?\n지금 노트북에 깔아 둔 아이콘은 더 이상 열리지 않아서, 새 아이콘을 다시 깔아야 해요.')) return;
+    await newDisplayKey(); toast('새 주소를 만들었어요. 바탕화면 아이콘을 다시 받아 주세요.');
+  };
+}
+function downloadBat(url) {
+  // 크롬(없으면 엣지)을 '키오스크(전체 화면)'로, 이 노트북의 다른 크롬 창과 섞이지 않게 따로 연다
+  const lines = [
+    '@echo off',
+    `set "URL=${url}"`,
+    String.raw`set "PROF=%LOCALAPPDATA%\ClassMonitor"`,
+    String.raw`set "CH=%ProgramFiles%\Google\Chrome\Application\chrome.exe"`,
+    String.raw`if not exist "%CH%" set "CH=%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"`,
+    String.raw`if not exist "%CH%" set "CH=%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"`,
+    'if exist "%CH%" goto chrome',
+    'start "" msedge --kiosk "%URL%" --edge-kiosk-type=fullscreen --user-data-dir="%PROF%" --no-first-run',
+    'exit /b',
+    ':chrome',
+    'start "" "%CH%" --kiosk --user-data-dir="%PROF%" --no-first-run --no-default-browser-check --autoplay-policy=no-user-gesture-required --disable-session-crashed-bubble "%URL%"',
+    '',
+  ];
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([lines.join('\r\n')], { type: 'application/octet-stream' }));
+  a.download = '수업화면_자리모니터.bat'; a.click();
 }
 function showQr(url) {
   openModal(`<div style="text-align:center"><div id="qrBox" style="display:inline-block"></div><div style="font-size:20px;font-weight:700;margin-top:12px;word-break:break-all">${esc(url)}</div>

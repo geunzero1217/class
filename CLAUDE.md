@@ -24,7 +24,8 @@
 | 외부 라이브러리 | Firebase JS SDK 10.12.2 (gstatic), pdf.js 3.11.174, qrcodejs 1.0.0 (cdnjs) — 학교망에서 모두 접속 확인함 |
 
 ### 파일
-- `index.html` 학생 입장 · `student.html` 학생 화면 · `admin.html` 선생님 관리(구글 로그인) · `teacher.html?l=수업ID` 수업 진행
+- `index.html` 학생 입장 · `student.html` 학생 화면 · `admin.html` 선생님 관리(구글 로그인) · `teacher.html?l=수업ID` 수업 진행 · `view.html?k=모니터키` 자리 모니터(보기 전용, 출석 무관)
+- `js/viewer.js` 선생님 화면 받기(`mountViewer`) — 학생 화면과 자리 모니터가 같이 씀 (화면 상태·슬라이드·필기·레이저·WebRTC 재시도·사진 전송)
 - `js/firebase-config.js` Firebase 설정값, `iceServers`(STUN/TURN), `LATE_MINUTES`, `PERIODS`
 - `js/fb.js` Firebase 초기화·수업 열기/닫기/삭제·출석 계산(`attRows`)·PDF/이미지→슬라이드(`uploadDeck`)·`SlideCache`
   - `r('')` = DB 루트 (여러 경로 한꺼번에 `update`). **`ref(db, '')`는 오류**라서 `r()`가 빈 문자열이면 `ref(db)`를 쓰게 고쳐 둠
@@ -49,13 +50,19 @@ ink/{lid}/{key}/{strokeId}     필기 {t, c, s, p, done}
 pointer/{lid}                  레이저 {k, x, y}
 rtc/{lid}/{uid}                WebRTC 신호 {req, offer, answer, tc/*, sc/*}
 relay/{lid}/want/{uid}, frame  우회 전송 (WebRTC 실패 학생에게 1.2초마다 960px JPEG)
+current                        {lid, cid, className, period} 자리 모니터가 따라갈 '지금 수업' (수업 열기·수업 화면 열기 때 설정, 종료·삭제 때 지움)
+displayKey                     자리 모니터 열쇠 (관리 화면에서 만들기/새로 만들기 → 예전 주소 막힘)
+viewers/{uid}                  모니터(익명)가 적는 열쇠. 규칙: displayKey 와 같아야 current 수업의 live·ink·pointer·rtc·relay 접근
+displays/{lid}/{uid}           연결된 자리 모니터 (선생님 화면에 '자리 모니터 N대')
 ```
 보안 규칙은 실제로 시험함: 학생은 명단·출석·다른 수업·선생님 목록을 못 읽고, 화면 상태·명단을 못 씀. 코드(`codes/{code}`) 확인만 가능.
 
 ## 수정 → 올리기
 - 이전 PC에는 git이 없어서 `gh api -X PUT repos/geunzero1217/class/contents/<경로>`로 파일을 올렸음. 새 PC에 git이 있으면 그냥 `git add / commit / push`.
 - GitHub Pages는 푸시 후 1분 안에 반영됨.
-- 보안 규칙 바꾼 뒤: `firebase deploy --only database` (Windows PowerShell에서 실행 정책 때문에 `firebase`가 막히면 `firebase.cmd`)
+- 보안 규칙 바꾼 뒤: `firebase.cmd deploy --only database --project ssaem-class-5726`
+  - **⚠ 이 PC의 firebase CLI는 기본 프로젝트가 다른 프로젝트(aitranslator-…)로 잡혀 있음. 모든 firebase 명령에 `--project ssaem-class-5726`을 꼭 붙일 것.**
+  - Git Bash에서 `database:get /경로` 쓸 때는 `export MSYS_NO_PATHCONV=1` (안 하면 `/`가 Git 폴더 경로로 바뀜)
 - 내 PC에서 미리 보기: 이 폴더에서 `python -m http.server 5500` → http://localhost:5500/admin.html (localhost는 승인된 도메인)
 - 시험할 때: **사용자의 실제 반(예: 1학년 1반)에 수업을 열거나 데이터를 쓰지 말 것.** `zzTest` 같은 시험용 반·수업을 CLI(`firebase database:update / 파일.json --force`)로 만들고 끝나면 지울 것.
 - 같은 브라우저에서 선생님(구글)과 학생(익명)을 동시에 못 씀 → 학생은 시크릿 창·다른 기기. (index.html은 선생님 로그인 상태면 안내만 하고 막음)

@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>자리 모니터</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body class="viewer">
+<!-- 자리 모니터: 선생님 화면만 꽉 차게 보여 주는 화면 (출석과 상관없음). 주소: view.html?k=모니터키 -->
+<div id="stageWrap" class="viewer-stage"></div>
+<div class="viewer-info" id="vInfo"><span class="pill" id="vConn">연결 중…</span><span id="vTitle"></span><span class="pill" id="vShare" hidden></span></div>
+<button class="viewer-fs" id="vFs" data-ic="expand" hidden>전체 화면으로 보기</button>
+<script src="js/common.js"></script>
+<script type="module">
+import { auth, r, set, remove, onValue, onDisconnect, serverTimestamp, signInAnonymously, waitAuth } from './js/fb.js';
+import { mountViewer } from './js/viewer.js';
+
+const stage = new Stage($('#stageWrap'));
+const say = (html) => stage.show('msg', html);
+const key = new URLSearchParams(location.search).get('k');
+
+/* 화면 꺼짐 막기 + 마우스 커서 숨기기 + 전체 화면 */
+let wakeLock = null;
+async function keepAwake() {
+  try { if ('wakeLock' in navigator && document.visibilityState === 'visible' && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.onrelease = () => { wakeLock = null; }; } } catch (_) { /* */ }
+}
+document.addEventListener('visibilitychange', keepAwake); keepAwake();
+let idle = null;
+function poke() {
+  document.body.classList.remove('idle'); clearTimeout(idle);
+  idle = setTimeout(() => document.body.classList.add('idle'), 3000);
+}
+['mousemove', 'pointerdown', 'keydown'].forEach((e) => document.addEventListener(e, poke)); poke();
+const isFull = () => !!document.fullscreenElement || (Math.abs(window.innerHeight - screen.height) < 4 && Math.abs(window.innerWidth - screen.width) < 4);
+function fsCheck() { $('#vFs').hidden = isFull(); }
+window.addEventListener('resize', fsCheck); fsCheck();
+document.addEventListener('click', () => { if (!isFull()) document.documentElement.requestFullscreen().catch(() => {}); });
+
+function setPill(el, text, cls) { el.textContent = text; el.className = 'pill ' + (cls || ''); }
+
+if (!key) say('주소가 올바르지 않아요<br><span class="small">관리 화면의 <b>자리 모니터 주소</b>로 열어 주세요</span>');
+else start();
+
+async function start() {
+  say('연결하는 중…');
+  let user = await waitAuth();
+  if (!user) {
+    try { user = (await signInAnonymously(auth)).user; }
+    catch (_) { say('연결하지 못했어요<br><span class="small">인터넷 연결을 확인해 주세요</span>'); return; }
+  }
+  const uid = user.uid;
+  if (user.isAnonymous) {
+    try { await set(r('viewers/' + uid), key); }
+    catch (_) { say('자리 모니터 주소가 바뀌었어요<br><span class="small">관리 화면에서 새 주소(바탕화면 아이콘)를 받아 주세요</span>'); return; }
+  }
+  onValue(r('.info/connected'), (s) => setPill($('#vConn'), s.val() ? '연결됨' : '연결 끊김 · 다시 연결 중', s.val() ? 'ok' : 'bad'));
+
+  // 선생님이 지금 진행하는 수업(current)을 따라감
+  let cur = null, viewer = null, dispRef = null;
+  onValue(r('current'), (s) => {
+    const c = s.val();
+    if (c && cur && c.lid === cur.lid) return;
+    if (viewer) { viewer.stop(); viewer = null; }
+    if (dispRef) { remove(dispRef).catch(() => {}); onDisconnect(dispRef).cancel(); dispRef = null; }
+    cur = c;
+    $('#vShare').hidden = true;
+    if (!c || !c.lid) {
+      $('#vTitle').textContent = '';
+      stage.setAspect(16 / 9); stage.show('wait');
+      document.title = '자리 모니터 · 수업 기다리는 중';
+      return;
+    }
+    $('#vTitle').textContent = `${c.className || ''}${c.period ? ' · ' + c.period + '교시' : ''}`;
+    document.title = '자리 모니터 · ' + (c.className || '수업');
+    // 선생님 화면에 "자리 모니터 N대"로 보이게
+    dispRef = r(`displays/${c.lid}/${uid}`);
+    set(dispRef, { t: serverTimestamp() }).then(() => onDisconnect(dispRef).remove()).catch(() => {});
+    viewer = mountViewer({
+      lid: c.lid, cid: c.cid, uid, stage,
+      onStatus({ sharing, relay, relayGot, videoReady, rtcFail }) {
+        const el = $('#vShare'); el.hidden = !sharing;
+        if (!sharing) return;
+        if (relay) setPill(el, relayGot ? '사진으로 보는 중' : '사진 받는 중…', 'warn');
+        else if (videoReady) setPill(el, '실시간 영상', 'ok');
+        else if (rtcFail) setPill(el, '영상 연결 안 됨 · 다시 시도 중', 'bad');
+        else setPill(el, '영상 연결 중…');
+        poke();
+      },
+    });
+    poke();
+  }, () => {   // 열쇠가 바뀌어 더 이상 읽을 수 없음
+    if (viewer) { viewer.stop(); viewer = null; }
+    $('#vShare').hidden = true; $('#vTitle').textContent = '';
+    say('자리 모니터 주소가 바뀌었어요<br><span class="small">관리 화면에서 새 주소(바탕화면 아이콘)를 받아 주세요</span>');
+  });
+}
+</script>
+</body>
+</html>

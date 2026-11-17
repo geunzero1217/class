@@ -69,31 +69,49 @@ export async function openLesson(cid, className, date, period) {
   const ex = list.find((l) => l.date === date && l.period === period);
   const code = ex && ex.status === 'open' ? ex.code : await freeCode();
   if (ex) {
-    await update(r(''), { [`lessons/${ex.id}/status`]: 'open', [`lessons/${ex.id}/code`]: code, [`lessons/${ex.id}/closedAt`]: null, [`codes/${code}`]: ex.id });
+    await update(r(''), { [`lessons/${ex.id}/status`]: 'open', [`lessons/${ex.id}/code`]: code, [`lessons/${ex.id}/closedAt`]: null, [`codes/${code}`]: ex.id,
+      current: { lid: ex.id, cid, className, period } });
     return ex.id;
   }
   const lid = push(r('lessons')).key;
   await update(r(''), {
     [`lessons/${lid}`]: { cid, className, date, period, code, status: 'open', openedAt: serverTimestamp(), lateMin: LATE_MINUTES },
     [`codes/${code}`]: lid,
+    current: { lid, cid, className, period },
   });
   return lid;
+}
+/* 자리 모니터가 따라갈 '지금 수업' (가장 최근에 열었거나 수업 화면을 연 수업) */
+export function setCurrent(lid, les) {
+  return set(r('current'), { lid, cid: les.cid, className: les.className || '', period: les.period || null }).catch(() => {});
+}
+async function clearCurrentIf(lid, u) {
+  try { if ((await get(r('current/lid'))).val() === lid) u.current = null; } catch (_) { /* */ }
+}
+/* 자리 모니터 주소 열쇠 (새로 만들면 예전 주소는 더 이상 안 열림) */
+export async function newDisplayKey() {
+  const a = new Uint8Array(12); crypto.getRandomValues(a);
+  const k = [...a].map((b) => b.toString(36).padStart(2, '0')).join('').slice(0, 20);
+  await set(r('displayKey'), k);
+  return k;
 }
 export async function closeLesson(lid) {
   const l = (await get(r('lessons/' + lid))).val();
   if (!l) return;
   const u = {
     [`lessons/${lid}/status`]: 'closed', [`lessons/${lid}/closedAt`]: serverTimestamp(),
-    [`live/${lid}`]: null, [`ink/${lid}`]: null, [`pointer/${lid}`]: null, [`rtc/${lid}`]: null, [`relay/${lid}`]: null, [`presence/${lid}`]: null,
+    [`live/${lid}`]: null, [`ink/${lid}`]: null, [`pointer/${lid}`]: null, [`rtc/${lid}`]: null, [`relay/${lid}`]: null, [`presence/${lid}`]: null, [`displays/${lid}`]: null,
   };
   if (l.code) u[`codes/${l.code}`] = null;
+  await clearCurrentIf(lid, u);
   await update(r(''), u);
 }
 export async function deleteLesson(lid) {
   const l = (await get(r('lessons/' + lid))).val();
   const u = { [`lessons/${lid}`]: null, [`members/${lid}`]: null, [`att/${lid}`]: null, [`live/${lid}`]: null, [`ink/${lid}`]: null,
-    [`pointer/${lid}`]: null, [`rtc/${lid}`]: null, [`relay/${lid}`]: null, [`presence/${lid}`]: null };
+    [`pointer/${lid}`]: null, [`rtc/${lid}`]: null, [`relay/${lid}`]: null, [`presence/${lid}`]: null, [`displays/${lid}`]: null };
   if (l && l.code && l.status === 'open') u[`codes/${l.code}`] = null;
+  await clearCurrentIf(lid, u);
   await update(r(''), u);
 }
 export async function deleteClass(cid) {

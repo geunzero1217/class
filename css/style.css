@@ -291,3 +291,20 @@ textarea.bulk { width: 100%; min-height: 130px; resize: vertical; margin-top: 10
 }
 .fillcard { background: var(--fill); padding: 16px; }
 .fillcard input, .fillcard select { background: #fff; }
+
+/* ── 자리 모니터 (view.html) — 선생님 화면만 꽉 차게 ── */
+body.viewer { background: #0b0d10; overflow: hidden; }
+.viewer-stage { position: fixed; inset: 0; }
+.viewer-stage.stage-wrap { padding: 0; }
+.viewer .stage { border-radius: 0; box-shadow: none; }
+.viewer-info {
+  position: fixed; left: 14px; bottom: 14px; display: flex; gap: 8px; align-items: center; z-index: 30;
+  background: #191f28b3; color: #fff; border-radius: 12px; padding: 6px 8px 6px 6px; font-size: 13px; font-weight: 600;
+  backdrop-filter: blur(8px); transition: opacity .4s;
+}
+.viewer-info .pill { background: #ffffff1f; color: #fff; }
+.viewer-info .pill.ok::before { background: #4ade80; } .viewer-info .pill.bad::before { background: #ff6b78; } .viewer-info .pill.warn::before { background: #fbbf24; }
+.viewer-fs { position: fixed; right: 16px; bottom: 16px; z-index: 30; background: var(--brand); color: #fff; padding: 12px 16px; border-radius: 12px; transition: opacity .4s; }
+.viewer-fs:hover { background: var(--brand-dark); }
+body.viewer.idle { cursor: none; }
+body.viewer.idle .viewer-info, body.viewer.idle .viewer-fs { opacity: 0; pointer-events: none; }

@@ -107,6 +107,7 @@
     <aside class="roster">
       <div class="roster-head">
         <div class="counts" id="counts"></div>
+        <div class="small muted" id="dispInfo" hidden></div>
         <div class="roster-opts">
           <label><input type="checkbox" id="optSort" checked> 이탈 학생 위로</label>
           <label><input type="checkbox" id="optSound" checked> 알림음</label>
@@ -123,7 +124,7 @@
 <script type="module">
 import {
   r, get, set, update, remove, push, onValue, onChildAdded, onChildChanged, onChildRemoved, serverTimestamp,
-  waitAuth, ensureTeacher, now, skey, closeLesson, uploadDeck, SlideCache, iceServers, LATE_MINUTES,
+  waitAuth, ensureTeacher, now, skey, closeLesson, uploadDeck, SlideCache, iceServers, LATE_MINUTES, setCurrent,
 } from './js/fb.js';
 
 const lid = new URLSearchParams(location.search).get('l');
@@ -147,6 +148,7 @@ function showEnded(msg) {
   $('#endedView').hidden = false; document.title = '수업 끝';
 }
 if (les.status !== 'open') showEnded('이미 끝난 수업이에요');
+else setCurrent(lid, les);   // 자리 모니터가 이 수업을 따라오게
 onValue(r(`lessons/${lid}/status`), (s) => { if (s.val() !== 'open') showEnded(); });
 onValue(r('.info/connected'), (s) => {
   const ok = !!s.val(), c = $('#conn');
@@ -544,6 +546,12 @@ onValue(r('rosters/' + cid), (s) => { roster = s.val() || {}; loaded.roster = tr
 onValue(r('members/' + lid), (s) => { members = s.val() || {}; loaded.members = true; recompute(); });
 onValue(r('presence/' + lid), (s) => { presence = s.val() || {}; loaded.presence = true; recompute(); });
 onValue(r('att/' + lid), (s) => { attDb = s.val() || {}; loaded.att = true; recompute(); });
+let dispN = 0;   // 자리 모니터 연결 대수
+onValue(r('displays/' + lid), (s) => {
+  dispN = s.size || 0;
+  $('#dispInfo').hidden = !dispN; $('#dispInfo').textContent = `자리 모니터 ${dispN}대 연결됨`;
+  renderRoster();
+});
 
 function recompute() {
   if (!Object.values(loaded).every(Boolean)) return;
@@ -623,7 +631,7 @@ function renderPip(list) {
   if (!box) return;
   const seats = [...list].sort((a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric: true }));
   const on = seats.filter((s) => s.state === 'active').length;
-  box.innerHTML = `<div class="pv-head"><span class="pv-c on"><i></i>${on}</span><span class="pv-c off"><i></i>${seats.length - on}</span><span class="pv-sp"></span><span class="pv-all">${seats.length}명</span></div>
+  box.innerHTML = `<div class="pv-head"><span class="pv-c on"><i></i>${on}</span><span class="pv-c off"><i></i>${seats.length - on}</span><span class="pv-sp"></span><span class="pv-all">${seats.length}명${dispN ? ` · 모니터 ${dispN}` : ''}</span></div>
     <div class="pv-grid">${seats.map((s) => `<span class="pv-n ${s.state === 'active' ? 'on' : 'off'}${flashIds.has(s.id) ? ' flash' : ''}">${esc(s.name)}</span>`).join('')
     || '<span class="pv-empty">등록된 학생이 없어요</span>'}</div>`;
   d.title = `보는 중 ${on} / ${seats.length}`;
