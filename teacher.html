@@ -374,7 +374,6 @@ async function startShare() {
   stage.video.srcObject = stream;
   await new Promise((res) => { if (stage.video.videoWidth) res(); else stage.video.onloadedmetadata = () => res(); setTimeout(res, 1500); });
   await remove(r('rtc/' + lid)).catch(() => {});
-  relayBytes = 0;
   setState({ mode: 'screen', sharing: true, shareId: Date.now(), aspect: videoAspect() });
   updateShareInfo(); if (relayWant > 0) startRelay();
   if (!(pipWin && !pipWin.closed)) $('#pipHint').hidden = false;
@@ -428,7 +427,8 @@ function updateShareInfo() {
   if (!stream) return;
   const n = [...peers.values()].filter((p) => p.pc.connectionState === 'connected').length;
   $('#shareInfo').textContent = `🔴 공유 중 · 영상 연결 ${n}명` + (relayWant ? ` · 📷 사진 전송 ${relayWant}명` : '')
-    + (relayBytes > 1e6 ? ` (지금까지 약 ${Math.round(relayBytes / 1e6)}MB)` : '');
+    + (relayBytes > 1e6 ? ` (지금까지 약 ${Math.round(relayBytes / 1e6)}MB)` : '')
+    + (relayCapped ? ' · ⛔ 사진 전송 한도 도달로 멈춤' : '');
   $('#shareInfo').title = '📷 사진 전송 = 영상 연결이 안 되는 학생에게 1.2초마다 화면 사진을 보내는 것. Firebase 무료 사용량을 씁니다.';
 }
 /* 타이머는 Worker 안에서 돌림 (선생님 탭이 뒤로 가도 느려지지 않게).
@@ -437,10 +437,11 @@ function updateShareInfo() {
    화면이 바뀌지 않았으면 보내지 않음 → Firebase 무료 사용량(월 10GB 내려받기) 절약 */
 const ticker = new Worker(URL.createObjectURL(new Blob(['let h;onmessage=e=>{clearInterval(h);if(e.data>0)h=setInterval(()=>postMessage(0),e.data)}'], { type: 'text/javascript' })));
 let relayOn = false, capBusy = false, imageCapture = null;
-let relayTrack = null, frameReader = null, lastFrame = null, frameSeq = 0, sentSeq = -1, relayBytes = 0;
+let relayTrack = null, frameReader = null, lastFrame = null, frameSeq = 0, sentSeq = -1, relayBytes = 0, relayCapped = false;
+const RELAY_LIMIT = 300e6;   // 한 수업(이 화면을 연 동안) 사진 전송 한도: 300MB
 const capCanvas = document.createElement('canvas');
 function startRelay() {
-  if (relayOn || !stream) return; relayOn = true; sentSeq = -1;
+  if (relayOn || !stream || relayCapped) return; relayOn = true; sentSeq = -1;
   const track = stream.getVideoTracks()[0];
   frameReader = null; imageCapture = null;
   if (window.MediaStreamTrackProcessor) {
@@ -489,6 +490,11 @@ ticker.onmessage = async () => {
     if (own && src.close) src.close();
     const d = capCanvas.toDataURL('image/jpeg', 0.5);
     relayBytes += d.length * Math.max(1, relayWant);
+    if (relayBytes > RELAY_LIMIT) {   // 무료 사용량 보호: 이 수업에서 사진 전송 그만
+      relayCapped = true; stopRelay(); updateShareInfo();
+      toast(`📷 사진 전송이 ${Math.round(RELAY_LIMIT / 1e6)}MB를 넘어 멈췄어요 (영상으로 보는 학생은 그대로)`, 6000);
+      return;
+    }
     await set(r(`relay/${lid}/frame`), { d, t: serverTimestamp() });
     updateShareInfo();
   } catch (_) { /* */ } finally { capBusy = false; }
