@@ -8,7 +8,8 @@
 <body>
 <div class="center-page">
   <div class="card login">
-    <h1>📺 수업 입장</h1>
+    <div class="logo" data-ic="monitor"></div>
+    <h1>수업 입장</h1>
     <div class="muted">선생님이 알려 준 <b>수업 코드</b>와 학번·이름을 입력하세요.</div>
     <form id="f">
       <input id="code" class="code-in" type="text" inputmode="numeric" maxlength="6" placeholder="수업 코드 6자리" autocomplete="off" required>
@@ -17,7 +18,7 @@
       <button class="primary" type="submit" id="go">입장하기</button>
       <div class="err" id="err"></div>
     </form>
-    <div class="small muted" style="margin-top:10px;text-align:right"><a href="admin.html">선생님</a></div>
+    <div class="foot"><a href="admin.html">선생님이신가요?</a></div>
   </div>
 </div>
 <script src="js/common.js"></script>

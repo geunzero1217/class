@@ -25,7 +25,7 @@ class Stage {
     wrap.classList.add('stage-wrap');
     wrap.innerHTML = `
       <div class="stage">
-        <div class="layer c-wait"><div class="wait-msg"><div class="big">⏸</div><div class="txt">수업 화면을 준비 중입니다</div></div></div>
+        <div class="layer c-wait"><div class="wait-msg"><div class="big"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 5v14M15 5v14"/></svg></div><div class="txt">수업 화면을 준비 중입니다</div></div></div>
         <img class="layer c-slide" alt="" draggable="false">
         <div class="layer c-web"><iframe referrerpolicy="no-referrer" allow="fullscreen; autoplay; clipboard-read; clipboard-write"></iframe></div>
         <video class="layer c-video" autoplay playsinline muted></video>
@@ -171,14 +171,14 @@ function renderView(stage, st, deck, isTeacher, extra = {}) {
     if (p) {
       stage.setAspect(p.w / p.h);
       if (extra.slide) { stage.setSlide(extra.slide); stage.show('slide'); } else stage.show('msg', '슬라이드를 불러오는 중…');
-    } else { stage.setAspect(16 / 9); stage.show('msg', isTeacher ? '📄 위의 <b>[자료 올리기]</b>로 PDF·이미지를 올리거나<br>목록에서 자료를 고르세요' : '수업 자료를 준비 중입니다'); }
+    } else { stage.setAspect(16 / 9); stage.show('msg', isTeacher ? '위의 <b>자료 올리기</b>로 PDF·이미지를 올리거나<br>목록에서 자료를 고르세요' : '수업 자료를 준비 중입니다'); }
   } else if (m === 'web') {
     stage.setAspect(16 / 9);
     if (st.url) { stage.setUrl(st.url); stage.show('web'); }
-    else stage.show('msg', isTeacher ? '🌐 위에 웹페이지 주소를 입력하세요' : '웹페이지를 준비 중입니다');
+    else stage.show('msg', isTeacher ? '위에 웹페이지 주소를 입력하세요' : '웹페이지를 준비 중입니다');
   } else if (m === 'screen') {
     stage.setAspect(st.aspect || 16 / 9);
-    if (!st.sharing) stage.show('msg', isTeacher ? '🖥 위의 <b>[화면 공유 시작]</b>을 누르세요<br><span class="small">공유할 창이나 탭을 고르면 학생에게 바로 보여요</span>' : '선생님 화면 공유를 기다리는 중입니다');
+    if (!st.sharing) stage.show('msg', isTeacher ? '위의 <b>화면 공유 시작</b>을 누르세요<br><span class="small">공유할 창이나 탭을 고르면 학생에게 바로 보여요</span>' : '선생님 화면 공유를 기다리는 중입니다');
     else if (extra.relay) stage.show('relay');
     else if (isTeacher || extra.videoReady) stage.show('video');
     else stage.show('msg', '화면에 연결하는 중…');
@@ -193,6 +193,55 @@ function ago(ms) {
   if (s < 3600) return Math.floor(s / 60) + '분';
   return Math.floor(s / 3600) + '시간';
 }
+/* 아이콘 (직접 그린 선 아이콘, 24×24). HTML: <i data-ic="pen"></i>  /  JS 문자열: ic('pen') */
+const ICONS = {
+  back: '<path d="M15 18l-6-6 6-6"/>',
+  prev: '<path d="M15 18l-6-6 6-6"/>',
+  next: '<path d="M9 6l6 6-6 6"/>',
+  pause: '<path d="M9 5v14M15 5v14"/>',
+  doc: '<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h4"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 3.7 5.7 3.7 9s-1.2 6.3-3.7 9c-2.5-2.7-3.7-5.7-3.7-9S9.5 5.7 12 3z"/>',
+  monitor: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+  board: '<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M7 13l3-3 2 2 4-4M9 21l1.5-4M15 21l-1.5-4"/>',
+  pin: '<path d="M9 3h6l-1 6 3 3H7l3-3z"/><path d="M12 12v9"/>',
+  stop: '<rect x="6" y="6" width="12" height="12" rx="2"/>',
+  play: '<path d="M8 5l11 7-11 7z"/>',
+  upload: '<path d="M12 16V4M7 9l5-5 5 5M5 20h14"/>',
+  download: '<path d="M12 4v12M7 11l5 5 5-5M5 20h14"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  cursor: '<path d="M6 3l13 7-6 2-2 6z"/>',
+  laser: '<circle cx="12" cy="12" r="2.6" fill="currentColor"/><circle cx="12" cy="12" r="7.5"/>',
+  pen: '<path d="M4 20l4-1L19 8l-3-3L5 16z"/><path d="M14 7l3 3"/>',
+  hl: '<path d="M4 21h7"/><path d="M8.5 17.5l-2-2L16 5l4 4-9.5 9.5z"/>',
+  eraser: '<path d="M9 20h11"/><path d="M5.5 14.5l8-8a2 2 0 0 1 2.8 0l2.2 2.2a2 2 0 0 1 0 2.8L12 18H9z"/><path d="M9.5 10.5l5 5"/>',
+  undo: '<path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>',
+  trash: '<path d="M4 7h16M10 11v6M14 11v6"/><path d="M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+  expand: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
+  shrink: '<path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/>',
+  logout: '<path d="M15 4h4v16h-4"/><path d="M10 8l-4 4 4 4M6 12h10"/>',
+  lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>',
+  qr: '<rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><path d="M14 14h2v2h-2zM18 18h2v2h-2zM14 19h2M19 14v2"/>',
+  calendar: '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>',
+  list: '<path d="M9 6h11M9 12h11M9 18h11"/><path d="M4.5 6h.01M4.5 12h.01M4.5 18h.01" stroke-width="3"/>',
+  users: '<circle cx="9" cy="8" r="3.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14c1.8.8 3 2.7 3 6"/>',
+  check: '<path d="M5 12.5l4.5 4.5L19 7"/>',
+  x: '<path d="M6 6l12 12M18 6L6 18"/>',
+  camera: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+  video: '<rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3"/>',
+  alert: '<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5v.01"/>',
+  mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
+  spin: '<path d="M12 3a9 9 0 1 0 9 9"/>',
+  edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/>',
+};
+function ic(name, cls = '') {
+  return `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
+}
+function paintIcons(root = document) {
+  $$('[data-ic]', root).forEach((el) => { if (!el.querySelector(':scope > svg.ic')) el.insertAdjacentHTML('afterbegin', ic(el.dataset.ic)); });
+}
+paintIcons();
+
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
 const fmtDate = (d) => { const t = new Date(d + 'T00:00:00'); return `${d.slice(5).replace('-', '/')}(${DOW[t.getDay()]})`; };
 const fmtTime = (ms) => (ms ? new Date(ms).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : '');

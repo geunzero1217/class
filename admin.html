@@ -8,32 +8,33 @@
 <body>
 <div id="loginView" class="center-page" hidden>
   <div class="card login">
-    <h1>🔐 선생님 로그인</h1>
+    <div class="logo" data-ic="lock"></div>
+    <h1>선생님 로그인</h1>
     <div class="muted">구글 계정으로 로그인해요. 처음 로그인한 계정이 이 사이트의 선생님 계정이 돼요.</div>
-    <div style="display:grid;gap:10px;margin-top:16px">
-      <button class="primary" id="googleBtn">G 구글 계정으로 로그인</button>
+    <div style="display:grid;gap:10px;margin-top:24px">
+      <button class="primary" id="googleBtn">구글 계정으로 로그인</button>
       <div class="err" id="loginErr"></div>
     </div>
-    <div class="small muted" style="margin-top:10px;text-align:right"><a href="index.html">학생 입장 화면</a></div>
+    <div class="foot"><a href="index.html">학생 입장 화면</a></div>
   </div>
 </div>
 
 <div id="adminView" hidden>
   <div class="topbar">
-    <span class="title">📺 수업 화면 미러링 · 관리</span>
+    <span class="title" data-ic="monitor">수업 관리</span>
     <span class="spacer"></span>
-    <span class="small" id="who"></span>
-    <button id="logoutBtn">로그아웃</button>
+    <span class="small muted" id="who"></span>
+    <button id="logoutBtn" class="small" data-ic="logout">로그아웃</button>
   </div>
   <div class="admin">
     <div class="card">
-      <div class="row"><b>학생 접속 주소</b><span class="small muted">학생은 이 주소에 들어가서 수업 코드를 입력해요</span></div>
+      <div class="row"><span class="sec-title">학생 접속 주소</span><span class="small muted">학생은 이 주소에 들어가서 수업 코드를 입력해요</span></div>
       <div class="addr" id="addr" style="margin-top:10px"></div>
     </div>
 
     <div class="admin-grid">
       <div class="card">
-        <b>반 목록</b>
+        <span class="sec-title">반 목록</span>
         <form id="newClass" class="row" style="margin-top:10px">
           <input id="newClassName" type="text" placeholder="새 반 이름 (예: 2학년 3반 정보)" style="flex:1" required>
           <button class="primary">개설</button>
@@ -83,8 +84,8 @@ $('#logoutBtn').onclick = async () => { await signOut(auth); location.reload(); 
 function enter(user) {
   $('#adminView').hidden = false;
   $('#who').textContent = user.email || '';
-  $('#addr').innerHTML = `<div class="row"><span style="width:110px" class="small">🌍 학생 주소</span><span class="u" style="flex:1">${esc(SITE_BASE)}</span>
-    <button id="copyAddr">복사</button><button id="qrAddr">QR</button></div>`;
+  $('#addr').innerHTML = `<div class="row"><span class="u" style="flex:1">${esc(SITE_BASE)}</span>
+    <button id="copyAddr">${ic('copy')}복사</button><button id="qrAddr">${ic('qr')}QR</button></div>`;
   $('#copyAddr').onclick = () => { navigator.clipboard.writeText(SITE_BASE); toast('복사했어요.'); };
   $('#qrAddr').onclick = () => showQr(SITE_BASE);
   onValue(r('classes'), (s) => { classes = s.val() || {}; renderClasses(); });
@@ -124,17 +125,17 @@ async function openClass(id) {
   cls = { id, name: classes[id].name, roster };
   $('#classPanel').innerHTML = `
     <div class="row">
-      <h2 style="margin:0;font-size:20px">${esc(cls.name)}</h2>
+      <h2 style="margin:0">${esc(cls.name)}</h2>
       <span class="muted">${Object.keys(roster).length}명</span>
       <button id="renameBtn" class="small">이름 변경</button>
       <span class="spacer"></span>
       <button id="deleteBtn" class="danger small">반 삭제</button>
     </div>
     <div class="tabs">
-      <button data-tab="lessons">📅 수업</button>
-      <button data-tab="book">📋 출석부</button>
-      <button data-tab="students">👥 학생 명단</button>
-      <button data-tab="decks">📄 자료</button>
+      <button data-tab="lessons">${ic('calendar')}수업</button>
+      <button data-tab="book">${ic('list')}출석부</button>
+      <button data-tab="students">${ic('users')}학생 명단</button>
+      <button data-tab="decks">${ic('doc')}자료</button>
     </div>
     <div id="tabBody"></div>`;
   $('#renameBtn').onclick = async () => {
@@ -169,17 +170,17 @@ async function tabLessons() {
   if (!cls || cls.id !== id) return;
   const per = Array.from({ length: PERIODS }, (_, i) => `<option value="${i + 1}">${i + 1}교시</option>`).join('');
   $('#tabBody').innerHTML = `
-    <form id="openForm" class="row card" style="background:#f8fafc">
+    <form id="openForm" class="row card fillcard">
       <b>수업 열기</b>
       <input type="date" id="lDate" value="${todayStr()}" required>
       <select id="lPeriod">${per}</select>
-      <button class="primary">▶ 수업 열기</button>
+      <button class="primary">${ic('play')}수업 열기</button>
       <span class="small muted">같은 날짜·교시를 다시 열면 출석 기록이 이어져요</span>
     </form>
     <div style="display:grid;gap:8px;margin-top:12px">
       ${lessons.map((l, i) => { const c = countOf(attRows(l, cls.roster, data[i].members, data[i].att)); return `<div class="lesson-row ${l.status}">
         <span class="when">${fmtDate(l.date)} ${l.period}교시</span>
-        ${l.status === 'open' ? `<span class="code-pill" title="수업 코드">${l.code}</span><span class="small" style="color:var(--green)">● 진행 중 · 접속 ${online[i]}명</span>` : '<span class="small muted">끝남</span>'}
+        ${l.status === 'open' ? `<span class="code-pill" title="수업 코드">${l.code}</span><span class="small live-dot">진행 중 · 접속 ${online[i]}명</span>` : '<span class="small muted">끝남</span>'}
         <span class="small">${countsHtml(c)}</span>
         <span class="spacer"></span>
         ${l.status === 'open' ? `<a href="teacher.html?l=${l.id}" target="_blank"><button class="primary small">수업 화면</button></a>` : ''}
@@ -262,7 +263,7 @@ async function tabBook() {
   const tot = (sid) => { const t = { present: 0, late: 0, absent: 0, early: 0 }; cells.forEach((c) => t[c[sid]]++); return t; };
   $('#tabBody').innerHTML = `
     <div class="row" style="margin-bottom:8px"><span class="small muted">○ 출석 · 지 지각 · ✕ 결석 · 조 조퇴 — 칸을 누르면 그 수업 출석을 볼 수 있어요</span>
-      <span class="spacer"></span><button id="csvBtn">⬇ 엑셀(CSV) 내려받기</button></div>
+      <span class="spacer"></span><button id="csvBtn">${ic('download')}엑셀(CSV) 내려받기</button></div>
     <div class="book-wrap"><table class="book">
       <thead><tr><th>학번</th><th>이름</th>${lessons.map((l) => `<th data-l="${l.id}" style="cursor:pointer">${fmtDate(l.date)}<br>${l.period}교시</th>`).join('')}
         <th>출석</th><th>지각</th><th>결석</th><th>조퇴</th></tr></thead>
@@ -286,7 +287,7 @@ function tabStudents() {
   const id = cls.id;
   const list = Object.values(cls.roster).sort((a, b) => String(a.sid).localeCompare(String(b.sid)));
   $('#tabBody').innerHTML = `
-    <div><b>학생 등록</b> <span class="small muted">한 줄에 "학번 이름". 엑셀에서 두 열을 복사해 붙여 넣어도 돼요.</span></div>
+    <div><span class="sec-title">학생 등록</span> <span class="small muted">한 줄에 "학번 이름". 엑셀에서 두 열을 복사해 붙여 넣어도 돼요.</span></div>
     <textarea class="bulk" id="bulk" placeholder="20301 김민준&#10;20302 이서연"></textarea>
     <div class="row"><button class="primary" id="addBtn">등록</button></div>
     <table class="stu-table" style="margin-top:12px"><thead><tr><th>학번</th><th>이름</th><th></th></tr></thead><tbody>
@@ -324,7 +325,7 @@ async function tabDecks() {
   const id = cls.id;
   const decks = (await get(r('decks/' + id))).val() || {};
   $('#tabBody').innerHTML = `
-    <div class="row"><button class="primary" id="upBtn">⬆ 자료 올리기 (PDF·이미지)</button><input type="file" id="upIn" accept=".pdf,image/*,.ppt,.pptx" multiple hidden>
+    <div class="row"><button class="primary" id="upBtn">${ic('upload')}자료 올리기 (PDF·이미지)</button><input type="file" id="upIn" accept=".pdf,image/*,.ppt,.pptx" multiple hidden>
       <span class="small" id="upMsg"></span></div>
     <div class="small muted" style="margin-top:6px">PPT는 PowerPoint에서 <b>파일 → 다른 이름으로 저장 → PDF</b>로 저장한 뒤 올려 주세요.</div>
     <ul style="margin:10px 0 0;padding-left:18px">${Object.entries(decks).map(([did, d]) => `<li style="margin:4px 0">${esc(d.name)} <span class="muted small">${d.pages.length}장</span>
@@ -333,8 +334,8 @@ async function tabDecks() {
   $('#upIn').onchange = async () => {
     const files = [...$('#upIn').files]; if (!files.length) return;
     $('#upBtn').disabled = true;
-    try { const d = await uploadDeck(id, files, (m) => ($('#upMsg').textContent = '⏳ ' + m)); toast(`${d.pages.length}장 올렸어요.`); tabDecks(); }
-    catch (er) { $('#upMsg').textContent = '❌ ' + er.message; $('#upBtn').disabled = false; }
+    try { const d = await uploadDeck(id, files, (m) => ($('#upMsg').textContent = m)); toast(`${d.pages.length}장 올렸어요.`); tabDecks(); }
+    catch (er) { $('#upMsg').textContent = er.message; $('#upBtn').disabled = false; }
   };
   $$('[data-deck]').forEach((b) => (b.onclick = async () => {
     if (!confirm('이 자료를 삭제할까요?')) return;

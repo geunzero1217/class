@@ -8,34 +8,34 @@
 <body>
 <div class="app">
   <div class="topbar">
-    <a href="admin.html" title="관리 화면">←</a>
+    <a class="back" href="admin.html" title="관리 화면" data-ic="back"></a>
     <span class="title" id="className">수업</span>
     <span class="code-pill" id="codePill" title="누르면 크게 보기 (학생에게 보여 주세요)">------</span>
     <span class="pill" id="conn">연결 중…</span>
-    <span class="row" id="modes">
-      <button data-mode="wait">⏸ 대기</button>
-      <button data-mode="slides">📄 슬라이드</button>
-      <button data-mode="web">🌐 웹페이지</button>
-      <button data-mode="screen">🖥 화면 공유</button>
-      <button data-mode="board">✏️ 칠판</button>
+    <span class="seg" id="modes">
+      <button data-mode="wait" data-ic="pause">대기</button>
+      <button data-mode="slides" data-ic="doc">슬라이드</button>
+      <button data-mode="web" data-ic="globe">웹페이지</button>
+      <button data-mode="screen" data-ic="monitor">화면 공유</button>
+      <button data-mode="board" data-ic="board">칠판</button>
     </span>
     <span class="spacer"></span>
-    <button id="pipBtn" title="PowerPoint 등 다른 프로그램 위에도 떠 있는 작은 학생 목록 창">📌 학생 목록 띄우기</button>
-    <button id="endBtn" title="수업을 끝내고 출석을 마감해요">⏹ 수업 종료</button>
+    <button id="pipBtn" data-ic="pin" title="PowerPoint 등 다른 프로그램 위에도 떠 있는 작은 학생 현황 창">학생 현황 창</button>
+    <button id="endBtn" class="danger" data-ic="stop" title="수업을 끝내고 출석을 마감해요">수업 종료</button>
   </div>
   <div class="code-big" id="codeBig" hidden>
     <div>
-      <div style="font-size:24px;opacity:.8">① 접속 주소</div>
+      <div class="lbl">접속 주소</div>
       <div class="u" id="cbUrl"></div>
-      <div style="font-size:24px;opacity:.8;margin-top:26px">② 수업 코드</div>
+      <div class="lbl" style="margin-top:30px">수업 코드</div>
       <div class="c" id="cbCode"></div>
       <div class="qr" id="cbQr"></div>
-      <div style="opacity:.6;margin-top:14px">아무 곳이나 누르면 닫혀요</div>
+      <div class="close">아무 곳이나 누르면 닫혀요</div>
     </div>
   </div>
   <div class="code-big" id="endedView" hidden>
-    <div><div style="font-size:40px;font-weight:800" id="endedMsg">수업이 끝났어요</div>
-      <div style="margin-top:18px"><a href="admin.html"><button class="primary">관리 화면으로 (출석 확인)</button></a></div></div>
+    <div><div style="font-size:34px;font-weight:700;letter-spacing:-0.02em" id="endedMsg">수업이 끝났어요</div>
+      <div style="margin-top:22px"><a href="admin.html"><button class="primary" style="padding:14px 22px;font-size:16px">관리 화면으로 (출석 확인)</button></a></div></div>
   </div>
 
   <div class="layout">
@@ -44,63 +44,63 @@
         <div class="grp" data-for="wait"><span class="muted">학생 화면에 "수업 화면을 준비 중입니다"가 보여요.</span></div>
         <div class="grp" data-for="slides">
           <select id="deckSel" style="max-width:260px"></select>
-          <button id="uploadBtn">⬆ 자료 올리기</button>
+          <button id="uploadBtn" data-ic="upload">자료 올리기</button>
           <input id="fileIn" type="file" accept=".pdf,image/*,.ppt,.pptx" multiple hidden>
           <span id="uploadMsg" class="small"></span>
           <span class="sep"></span>
-          <button id="prevBtn" title="이전 (←)">◀</button>
+          <button id="prevBtn" data-ic="prev" title="이전 (←)"></button>
           <span id="pageInfo" style="min-width:64px;text-align:center">-</span>
-          <button id="nextBtn" title="다음 (→, 스페이스)">▶</button>
+          <button id="nextBtn" data-ic="next" title="다음 (→, 스페이스)"></button>
         </div>
         <div class="grp" data-for="web" style="flex:1">
           <form id="urlForm" class="row" style="flex:1">
             <input id="urlIn" type="text" placeholder="https://… 보여 줄 웹페이지 주소" style="flex:1;min-width:200px">
             <button class="primary">열기</button>
           </form>
-          <span class="small muted">화면 안에 안 열리는 사이트는 🖥 화면 공유(탭)를 쓰세요</span>
+          <span class="small muted">화면 안에 안 열리는 사이트는 화면 공유(탭)를 쓰세요</span>
         </div>
         <div class="grp" data-for="screen">
-          <button id="shareBtn" class="primary">▶ 화면 공유 시작</button>
-          <button id="stopShareBtn" hidden>■ 공유 중지</button>
-          <span id="shareInfo" class="small"></span>
+          <button id="shareBtn" class="primary" data-ic="play">화면 공유 시작</button>
+          <button id="stopShareBtn" class="danger" data-ic="stop" hidden>공유 중지</button>
+          <span id="shareInfo" class="small" style="color:var(--sub);font-weight:600"></span>
           <span class="sep"></span>
-          <label class="small" style="display:flex;gap:4px;align-items:center;cursor:pointer" title="영상 연결이 안 되는 학생에게 1.2초마다 화면 사진을 보내요. 화질이 낮고 Firebase 무료 사용량을 써요 (한 수업 300MB까지).">
-            <input type="checkbox" id="optRelay"> 📷 영상 안 되는 학생에게 사진 보내기</label>
-          <button id="micBtn" class="small" title="학교 와이파이에서 영상 연결이 잘 안 될 때 한 번 눌러 두세요">🔧 영상 연결 돕기</button>
+          <label class="small check" title="영상 연결이 안 되는 학생에게 1.2초마다 화면 사진을 보내요. 화질이 낮고 Firebase 무료 사용량을 써요 (한 수업 300MB까지).">
+            <input type="checkbox" id="optRelay"> 영상 안 되는 학생에게 사진 보내기</label>
+          <button id="micBtn" class="small" data-ic="mic" title="학교 와이파이에서 영상 연결이 잘 안 될 때 한 번 눌러 두세요">영상 연결 돕기</button>
         </div>
         <div class="grp" data-for="board">
-          <button id="bPrev">◀</button>
+          <button id="bPrev" data-ic="prev"></button>
           <span id="boardInfo" style="min-width:64px;text-align:center">1 / 1</span>
-          <button id="bNext">▶</button>
-          <button id="bAdd">＋ 새 페이지</button>
+          <button id="bNext" data-ic="next"></button>
+          <button id="bAdd" data-ic="plus">새 페이지</button>
         </div>
       </div>
 
       <div id="stageWrap"></div>
 
       <div class="toolbar" id="toolbar">
-        <button data-tool="select" title="선택 (Esc)">🖱 선택</button>
-        <button data-tool="laser" title="레이저 포인터 (L)">🔴 레이저</button>
-        <button data-tool="pen" title="펜 (P)">🖊 펜</button>
-        <button data-tool="hl" title="형광펜 (H)">🖍 형광펜</button>
-        <button data-tool="eraser" title="지우개 (E)">🧽 지우개</button>
+        <button data-tool="select" data-ic="cursor" title="선택 (Esc)">선택</button>
+        <button data-tool="laser" data-ic="laser" title="레이저 포인터 (L)">레이저</button>
+        <button data-tool="pen" data-ic="pen" title="펜 (P)">펜</button>
+        <button data-tool="hl" data-ic="hl" title="형광펜 (H)">형광펜</button>
+        <button data-tool="eraser" data-ic="eraser" title="지우개 (E)">지우개</button>
         <span class="sep"></span>
         <span id="colors" class="row" style="gap:5px"></span>
         <span class="sep"></span>
         <span id="sizes" class="row" style="gap:5px"></span>
         <span class="sep"></span>
-        <button id="undoBtn" title="되돌리기 (Ctrl+Z)">↶ 되돌리기</button>
-        <button id="clearBtn">🗑 모두 지우기</button>
+        <button id="undoBtn" data-ic="undo" title="되돌리기 (Ctrl+Z)">되돌리기</button>
+        <button id="clearBtn" data-ic="trash">모두 지우기</button>
         <span class="sep"></span>
-        <button id="fsBtn" title="전체 화면">⛶ 전체 화면</button>
+        <button id="fsBtn" data-ic="expand" title="전체 화면">전체 화면</button>
       </div>
 
       <div class="mini" id="mini" title="클릭하면 접기/펴기"></div>
       <div class="pip-hint" id="pipHint" hidden>
-        <button id="pipHintBtn">📌 학생 현황 창 띄우기</button>
+        <button id="pipHintBtn" data-ic="pin">학생 현황 창 띄우기</button>
         <div class="txt">다른 프로그램을 시연하는 동안에도 화면 위에 작게 떠 있어서<br>이탈한 학생을 바로 볼 수 있어요.</div>
-        <div class="txt warn">⚠ <b>전체 화면</b>을 공유하면 이 작은 창도 학생 화면에 보여요.<br>학생 이름이 보이는 게 싫으면 화면 구석(공유 안 하는 모니터)에 두세요.</div>
-        <button id="pipHintX" class="x" title="닫기">✕</button>
+        <div class="txt warn"><b>전체 화면</b>을 공유하면 이 작은 창도 학생 화면에 보여요.<br>학생 이름이 보이는 게 싫으면 화면 구석(공유 안 하는 모니터)에 두세요.</div>
+        <button id="pipHintX" class="x" data-ic="x" title="닫기"></button>
       </div>
     </main>
 
@@ -220,11 +220,11 @@ $('#fileIn').onchange = async () => {
   const files = [...$('#fileIn').files]; $('#fileIn').value = ''; if (!files.length) return;
   $('#uploadBtn').disabled = true;
   try {
-    const deck = await uploadDeck(cid, files, (m) => ($('#uploadMsg').textContent = '⏳ ' + m));
+    const deck = await uploadDeck(cid, files, (m) => ($('#uploadMsg').textContent = m));
     setState({ mode: 'slides', deckId: deck.id, page: 0 });
-    $('#uploadMsg').textContent = `✅ ${deck.pages.length}장`;
+    $('#uploadMsg').textContent = `${deck.pages.length}장 올렸어요`;
     setTimeout(() => ($('#uploadMsg').textContent = ''), 4000);
-  } catch (er) { $('#uploadMsg').textContent = '❌ ' + er.message; }
+  } catch (er) { $('#uploadMsg').textContent = er.message; }
   finally { $('#uploadBtn').disabled = false; }
 };
 
@@ -330,7 +330,7 @@ function undo() {
       it.clear.forEach(([id, s]) => { stage.ink.strokes.set(id, s); u[`ink/${lid}/${key}/${id}`] = { t: s.t, c: s.c, s: s.s, p: encPts(s.pts), done: true }; });
       stage.ink.renderAll();
       update(r(''), u).catch((e) => toast('복구 실패: ' + e.message));
-      toast('↶ 지운 필기를 다시 살렸어요'); return;
+      toast('지운 필기를 다시 살렸어요'); return;
     }
     if (it.key === key && stage.ink.strokes.has(it.id)) {
       myStack.splice(i, 1); stage.ink.remove(it.id); remove(r(`ink/${lid}/${key}/${it.id}`)).catch(() => {}); return;
@@ -345,12 +345,12 @@ $('#clearBtn').onclick = () => {
   const saved = [...stage.ink.strokes].filter(([, s]) => s.done);
   if (saved.length) myStack.push({ key, clear: saved });
   stage.ink.clear(); remove(r(`ink/${lid}/${key}`)).catch(() => {});
-  toast('🗑 모두 지웠어요 · 실수였다면 ↶ 되돌리기(Ctrl+Z)', 4000);
+  toast('모두 지웠어요 · 실수였다면 되돌리기(Ctrl+Z)', 4000);
 };
 
 /* 전체 화면 / 단축키 */
 $('#fsBtn').onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else $('#main').requestFullscreen().catch(() => {}); };
-document.addEventListener('fullscreenchange', () => { $('#fsBtn').textContent = document.fullscreenElement ? '⛶ 전체 화면 끝' : '⛶ 전체 화면'; });
+document.addEventListener('fullscreenchange', () => { $('#fsBtn').innerHTML = document.fullscreenElement ? ic('shrink') + '전체 화면 끝' : ic('expand') + '전체 화면'; });
 $('#mini').onclick = () => $('#mini').classList.toggle('collapsed');
 document.addEventListener('keydown', (e) => {
   const tag = (e.target.tagName || '').toLowerCase();
@@ -415,7 +415,7 @@ $('#micBtn').onclick = async () => {
   try {
     const s = await navigator.mediaDevices.getUserMedia({ audio: true });
     s.getTracks().forEach((t) => t.stop());
-    toast('✅ 설정했어요. 학생들은 자동으로 다시 연결을 시도해요. (마이크 소리는 쓰지 않아요)', 5000);
+    toast('설정했어요. 학생들은 자동으로 다시 연결을 시도해요. (마이크 소리는 쓰지 않아요)', 5000);
   } catch (_) { toast('마이크 권한이 허용되지 않았어요. 주소창 왼쪽 자물쇠 → 마이크 → 허용', 5000); }
 };
 $('#stopShareBtn').onclick = stopShare;
@@ -456,11 +456,11 @@ function updateShareInfo() {
   if (!stream) return;
   const all = [...peers.values()], n = all.filter((p) => p.pc.connectionState === 'connected').length;
   const bad = all.length - n;
-  $('#shareInfo').textContent = `🔴 공유 중 · 영상 연결 ${n}명` + (bad ? ` · 연결 중/안 됨 ${bad}명` : '')
-    + (relayWant && st.relay ? ` · 📷 사진 전송 ${relayWant}명` : '')
+  $('#shareInfo').textContent = `공유 중 · 영상 연결 ${n}명` + (bad ? ` · 연결 중/안 됨 ${bad}명` : '')
+    + (relayWant && st.relay ? ` · 사진 전송 ${relayWant}명` : '')
     + (relayBytes > 1e6 ? ` (지금까지 약 ${Math.round(relayBytes / 1e6)}MB)` : '')
-    + (relayCapped ? ' · ⛔ 사진 전송 한도 도달로 멈춤' : '');
-  $('#shareInfo').title = '📷 사진 전송 = 영상 연결이 안 되는 학생에게 1.2초마다 화면 사진을 보내는 것. Firebase 무료 사용량을 씁니다.';
+    + (relayCapped ? ' · 사진 전송 한도 도달로 멈춤' : '');
+  $('#shareInfo').title = '사진 전송 = 영상 연결이 안 되는 학생에게 1.2초마다 화면 사진을 보내는 것. Firebase 무료 사용량을 씁니다.';
 }
 /* 타이머는 Worker 안에서 돌림 (선생님 탭이 뒤로 가도 느려지지 않게).
    화면은 MediaStreamTrackProcessor 로 트랙에서 직접 받음 → 탭이 뒤에 있어도(다른 프로그램 시연 중) 계속 최신 화면.
@@ -523,7 +523,7 @@ ticker.onmessage = async () => {
     relayBytes += d.length * Math.max(1, relayWant);
     if (relayBytes > RELAY_LIMIT) {   // 무료 사용량 보호: 이 수업에서 사진 전송 그만
       relayCapped = true; stopRelay(); updateShareInfo();
-      toast(`📷 사진 전송이 ${Math.round(RELAY_LIMIT / 1e6)}MB를 넘어 멈췄어요 (영상으로 보는 학생은 그대로)`, 6000);
+      toast(`사진 전송이 ${Math.round(RELAY_LIMIT / 1e6)}MB를 넘어 멈췄어요 (영상으로 보는 학생은 그대로)`, 6000);
       return;
     }
     await set(r(`relay/${lid}/frame`), { d, t: serverTimestamp() });
@@ -611,7 +611,7 @@ function renderRoster() {
   const list = rosterList(); const { c, html } = countsHtml(list);
   $('#counts').innerHTML = html;
   $('#rosterList').innerHTML = rosterItems(list);
-  document.title = (c.out ? `🔴${c.out} ` : '') + (ended ? '수업 끝' : '수업 · ' + les.className);
+  document.title = (c.out ? `(${c.out}명 안 봄) ` : '') + (ended ? '수업 끝' : '수업 · ' + les.className);
   const out = list.filter((s) => s.state === 'away' || s.state === 'left');
   $('#mini').innerHTML = `<div class="mc">${html}</div><ul>${(out.length ? out : list.filter((s) => s.state !== 'none')).slice(0, 40)
     .map((s) => `<li class="${s.state}"><i></i>${esc(s.name)}</li>`).join('')}</ul>`;

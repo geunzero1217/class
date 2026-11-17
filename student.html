@@ -13,10 +13,10 @@
     <span id="me" class="muted"></span>
     <span class="spacer"></span>
     <span class="pill" id="shareSt" hidden></span>
-    <button id="fsBtn">⛶ 전체 화면</button>
-    <button id="logoutBtn">나가기</button>
+    <button id="fsBtn" class="small" data-ic="expand">전체 화면</button>
+    <button id="logoutBtn" class="small" data-ic="logout">나가기</button>
   </div>
-  <div class="notice">👀 이 화면을 벗어나면(다른 탭·창으로 이동) 선생님께 표시됩니다.</div>
+  <div class="notice">이 화면을 벗어나면(다른 탭·창으로 이동) 선생님께 표시됩니다.</div>
   <div class="student-stage"><div id="stageWrap" style="flex:1;display:grid"></div></div>
 </div>
 <script src="js/common.js"></script>
@@ -83,13 +83,13 @@ function render() {
   const ss = $('#shareSt'), sharing = st.mode === 'screen' && st.sharing;
   ss.hidden = !sharing;
   if (sharing) {
-    if (relay) { ss.textContent = relayGot ? '📷 사진으로 보는 중 (1초쯤 늦어요)' : '📷 사진 화면 받는 중…'; ss.className = 'pill warn'; }
-    else if (videoReady) { ss.textContent = '🎥 실시간 영상'; ss.className = 'pill ok'; }
-    else if (rtcFail) { ss.textContent = '⚠ 영상 연결 안 됨 · 다시 시도 중'; ss.className = 'pill bad'; }
-    else { ss.textContent = '⏳ 영상 연결 중…'; ss.className = 'pill'; }
+    if (relay) { ss.textContent = relayGot ? '사진으로 보는 중 (1초쯤 늦어요)' : '사진 화면 받는 중…'; ss.className = 'pill warn'; }
+    else if (videoReady) { ss.textContent = '실시간 영상'; ss.className = 'pill ok'; }
+    else if (rtcFail) { ss.textContent = '영상 연결 안 됨 · 다시 시도 중'; ss.className = 'pill bad'; }
+    else { ss.textContent = '영상 연결 중…'; ss.className = 'pill'; }
   }
-  if (sharing && relay && !relayGot) stage.show('msg', '📷 선생님 화면 사진을 받는 중…<br><span class="small">영상 연결이 안 돼서 사진으로 보여 드려요</span>');
-  else if (sharing && !relay && !videoReady && rtcFail) stage.show('msg', '😥 선생님 화면에 연결하지 못했어요<br><b>학교 와이파이</b>에 연결했는지 확인해 주세요<br><span class="small">자동으로 계속 다시 시도하고 있어요</span>');
+  if (sharing && relay && !relayGot) stage.show('msg', '선생님 화면 사진을 받는 중…<br><span class="small">영상 연결이 안 돼서 사진으로 보여 드려요</span>');
+  else if (sharing && !relay && !videoReady && rtcFail) stage.show('msg', '선생님 화면에 연결하지 못했어요<br><b>학교 와이파이</b>에 연결했는지 확인해 주세요<br><span class="small">자동으로 계속 다시 시도하고 있어요</span>');
 }
 let deckUnsub = null;
 function watchDeck() {

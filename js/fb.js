@@ -12,7 +12,7 @@ import { firebaseConfig, iceServers, LATE_MINUTES, PERIODS } from './firebase-co
 export const CONFIGURED = !String(firebaseConfig.apiKey || '').includes('PASTE');
 if (!CONFIGURED) {
   document.addEventListener('DOMContentLoaded', () => {
-    document.body.innerHTML = `<div class="center-page"><div class="card login"><h1>⚙️ 설정이 필요해요</h1>
+    document.body.innerHTML = `<div class="center-page"><div class="card login"><h1>설정이 필요해요</h1>
       <p>js/firebase-config.js 파일에 Firebase 설정(firebaseConfig)을 붙여 넣어 주세요.</p></div></div>`;
   });
   throw new Error('firebase-config.js 를 먼저 채워 주세요');
