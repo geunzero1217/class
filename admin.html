@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>수업 관리</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="loginView" class="center-page" hidden>
+  <div class="card login">
+    <h1>🔐 선생님 로그인</h1>
+    <div class="muted">구글 계정으로 로그인해요. 처음 로그인한 계정이 이 사이트의 선생님 계정이 돼요.</div>
+    <div style="display:grid;gap:10px;margin-top:16px">
+      <button class="primary" id="googleBtn">G 구글 계정으로 로그인</button>
+      <div class="err" id="loginErr"></div>
+    </div>
+    <div class="small muted" style="margin-top:10px;text-align:right"><a href="index.html">학생 입장 화면</a></div>
+  </div>
+</div>
+
+<div id="adminView" hidden>
+  <div class="topbar">
+    <span class="title">📺 수업 화면 미러링 · 관리</span>
+    <span class="spacer"></span>
+    <span class="small" id="who"></span>
+    <button id="logoutBtn">로그아웃</button>
+  </div>
+  <div class="admin">
+    <div class="card">
+      <div class="row"><b>학생 접속 주소</b><span class="small muted">학생은 이 주소에 들어가서 수업 코드를 입력해요</span></div>
+      <div class="addr" id="addr" style="margin-top:10px"></div>
+    </div>
+
+    <div class="admin-grid">
+      <div class="card">
+        <b>반 목록</b>
+        <form id="newClass" class="row" style="margin-top:10px">
+          <input id="newClassName" type="text" placeholder="새 반 이름 (예: 2학년 3반 정보)" style="flex:1" required>
+          <button class="primary">개설</button>
+        </form>
+        <ul class="class-list" id="classList"></ul>
+      </div>
+      <div class="card" id="classPanel"><div class="muted">왼쪽에서 반을 고르거나 새로 개설하세요.</div></div>
+    </div>
+  </div>
+</div>
+
+<div id="modal" class="modal" hidden><div class="box" id="modalBox"></div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="js/common.js"></script>
+<script type="module">
+import {
+  auth, r, get, set, update, remove, push, onValue, serverTimestamp, waitAuth, googleLogin, ensureTeacher, signOut,
+  skey, normName, classLessons, openLesson, closeLesson, deleteLesson, deleteClass, attRows, STATUS, uploadDeck, deleteDeck, PERIODS,
+} from './js/fb.js';
+
+const stBadge = (s) => `<span class="st st-${s}">${STATUS[s]}</span>`;
+let selected = localStorage.getItem('adminClass'), tab = localStorage.getItem('adminTab') || 'lessons';
+let classes = {}, cls = null;
+
+/* 로그인 */
+async function start() {
+  const user = await waitAuth();
+  if (user && !user.isAnonymous && await ensureTeacher(user)) return enter(user);
+  $('#loginView').hidden = false;
+  if (user && !user.isAnonymous) $('#loginErr').textContent = `${user.email} 계정은 선생님으로 등록되어 있지 않아요.`;
+}
+$('#googleBtn').onclick = async () => {
+  $('#loginErr').textContent = '';
+  try {
+    const user = await googleLogin();
+    if (await ensureTeacher(user)) { $('#loginView').hidden = true; enter(user); }
+    else { $('#loginErr').textContent = `${user.email} 계정은 선생님으로 등록되어 있지 않아요.`; await signOut(auth); }
+  } catch (er) {
+    $('#loginErr').textContent = er.code === 'auth/unauthorized-domain'
+      ? '이 주소가 Firebase 로그인 허용 목록에 없어요. Firebase 콘솔 → Authentication → 설정 → 승인된 도메인에 이 주소를 추가해 주세요.'
+      : '로그인하지 못했어요: ' + er.message;
+  }
+};
+$('#logoutBtn').onclick = async () => { await signOut(auth); location.reload(); };
+function enter(user) {
+  $('#adminView').hidden = false;
+  $('#who').textContent = user.email || '';
+  $('#addr').innerHTML = `<div class="row"><span style="width:110px" class="small">🌍 학생 주소</span><span class="u" style="flex:1">${esc(SITE_BASE)}</span>
+    <button id="copyAddr">복사</button><button id="qrAddr">QR</button></div>`;
+  $('#copyAddr').onclick = () => { navigator.clipboard.writeText(SITE_BASE); toast('복사했어요.'); };
+  $('#qrAddr').onclick = () => showQr(SITE_BASE);
+  onValue(r('classes'), (s) => { classes = s.val() || {}; renderClasses(); });
+}
+function showQr(url) {
+  openModal(`<div style="text-align:center"><div id="qrBox" style="display:inline-block"></div><div style="font-size:20px;font-weight:700;margin-top:12px;word-break:break-all">${esc(url)}</div>
+    <div style="margin-top:12px"><button id="mClose">닫기</button></div></div>`);
+  $('#mClose').onclick = closeModal;
+  if (window.QRCode) new QRCode($('#qrBox'), { text: url, width: 320, height: 320 });
+}
+function openModal(html) { $('#modalBox').innerHTML = html; $('#modal').hidden = false; }
+function closeModal() { $('#modal').hidden = true; }
+$('#modal').onclick = (e) => { if (e.target.id === 'modal') closeModal(); };
+
+/* 반 목록 */
+function renderClasses() {
+  const ids = Object.keys(classes).sort((a, b) => classes[a].name.localeCompare(classes[b].name));
+  $('#classList').innerHTML = ids.map((id) => `<li data-id="${id}" class="${id === selected ? 'sel' : ''}"><span class="n">${esc(classes[id].name)}</span></li>`).join('')
+    || '<li class="muted" style="cursor:default">아직 반이 없어요.</li>';
+  $$('#classList li[data-id]').forEach((li) => (li.onclick = () => openClass(li.dataset.id)));
+  if (selected && classes[selected]) { if (!cls || cls.id !== selected) openClass(selected); }
+  else if (ids.length) openClass(ids[0]);
+  else { cls = null; $('#classPanel').innerHTML = '<div class="muted">왼쪽에서 반을 고르거나 새로 개설하세요.</div>'; }
+}
+$('#newClass').onsubmit = async (e) => {
+  e.preventDefault();
+  const ref = push(r('classes'));
+  selected = ref.key; tab = 'students'; cls = null;
+  await set(ref, { name: $('#newClassName').value.trim(), created: serverTimestamp() });
+  $('#newClassName').value = '';
+};
+
+async function openClass(id) {
+  selected = id; localStorage.setItem('adminClass', id);
+  $$('#classList li').forEach((li) => li.classList.toggle('sel', li.dataset.id === id));
+  const roster = (await get(r('rosters/' + id))).val() || {};
+  cls = { id, name: classes[id].name, roster };
+  $('#classPanel').innerHTML = `
+    <div class="row">
+      <h2 style="margin:0;font-size:20px">${esc(cls.name)}</h2>
+      <span class="muted">${Object.keys(roster).length}명</span>
+      <button id="renameBtn" class="small">이름 변경</button>
+      <span class="spacer"></span>
+      <button id="deleteBtn" class="danger small">반 삭제</button>
+    </div>
+    <div class="tabs">
+      <button data-tab="lessons">📅 수업</button>
+      <button data-tab="book">📋 출석부</button>
+      <button data-tab="students">👥 학생 명단</button>
+      <button data-tab="decks">📄 자료</button>
+    </div>
+    <div id="tabBody"></div>`;
+  $('#renameBtn').onclick = async () => {
+    const n = prompt('새 반 이름', cls.name); if (!n) return;
+    await update(r('classes/' + id), { name: n.trim() }); cls.name = n.trim(); openClass(id);
+  };
+  $('#deleteBtn').onclick = async () => {
+    if (!confirm(`'${cls.name}' 반을 삭제할까요?\n학생 명단, 자료, 출석 기록이 모두 지워지고 되돌릴 수 없어요.`)) return;
+    await deleteClass(id); selected = null; cls = null;
+  };
+  $$('.tabs button').forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
+  showTab(tab);
+}
+function showTab(t) {
+  tab = t; localStorage.setItem('adminTab', t);
+  $$('.tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === t));
+  ({ lessons: tabLessons, book: tabBook, students: tabStudents, decks: tabDecks })[t]();
+}
+async function lessonData(l) {
+  const [m, a] = await Promise.all([get(r('members/' + l.id)), get(r('att/' + l.id))]);
+  return { members: m.val() || {}, att: a.val() || {} };
+}
+const countOf = (rows) => { const c = { present: 0, late: 0, absent: 0, early: 0 }; rows.forEach((x) => c[x.status]++); return c; };
+const countsHtml = (c) => `${stBadge('present')} ${c.present} ${stBadge('late')} ${c.late} ${stBadge('absent')} ${c.absent}${c.early ? ' ' + stBadge('early') + ' ' + c.early : ''}`;
+
+/* 📅 수업 */
+async function tabLessons() {
+  const id = cls.id;
+  const lessons = (await classLessons(id)).sort((a, b) => (b.date + b.period).localeCompare(a.date + a.period) || b.period - a.period);
+  const data = await Promise.all(lessons.map(lessonData));
+  const online = await Promise.all(lessons.map((l) => (l.status === 'open' ? get(r('presence/' + l.id)).then((s) => s.size) : 0)));
+  if (!cls || cls.id !== id) return;
+  const per = Array.from({ length: PERIODS }, (_, i) => `<option value="${i + 1}">${i + 1}교시</option>`).join('');
+  $('#tabBody').innerHTML = `
+    <form id="openForm" class="row card" style="background:#f8fafc">
+      <b>수업 열기</b>
+      <input type="date" id="lDate" value="${todayStr()}" required>
+      <select id="lPeriod">${per}</select>
+      <button class="primary">▶ 수업 열기</button>
+      <span class="small muted">같은 날짜·교시를 다시 열면 출석 기록이 이어져요</span>
+    </form>
+    <div style="display:grid;gap:8px;margin-top:12px">
+      ${lessons.map((l, i) => { const c = countOf(attRows(l, cls.roster, data[i].members, data[i].att)); return `<div class="lesson-row ${l.status}">
+        <span class="when">${fmtDate(l.date)} ${l.period}교시</span>
+        ${l.status === 'open' ? `<span class="code-pill" title="수업 코드">${l.code}</span><span class="small" style="color:var(--green)">● 진행 중 · 접속 ${online[i]}명</span>` : '<span class="small muted">끝남</span>'}
+        <span class="small">${countsHtml(c)}</span>
+        <span class="spacer"></span>
+        ${l.status === 'open' ? `<a href="teacher.html?l=${l.id}" target="_blank"><button class="primary small">수업 화면</button></a>` : ''}
+        <button class="small" data-att="${l.id}">출석 보기</button>
+        ${l.status === 'open' ? `<button class="small" data-close="${l.id}">종료</button>` : `<button class="small" data-reopen="${l.date}|${l.period}">다시 열기</button>`}
+        <button class="small danger" data-ldel="${l.id}">삭제</button>
+      </div>`; }).join('') || '<div class="muted">아직 연 수업이 없어요. 위에서 날짜와 교시를 고르고 수업을 여세요.</div>'}
+    </div>`;
+  // 지금 시각에 맞는 교시를 미리 골라 둠 (보통 시간표: 8:40, 9:40, 10:40, 11:40, 13:30, 14:30, 15:30 시작)
+  const START = [520, 580, 640, 700, 810, 870, 930];
+  const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
+  let guess = 1; START.forEach((m, i) => { if (nowMin >= m - 10) guess = i + 1; });
+  $('#lPeriod').value = String(Math.min(PERIODS, guess));
+  $('#openForm').onsubmit = (e) => { e.preventDefault(); startLesson($('#lDate').value, +$('#lPeriod').value, lessons); };
+  $$('[data-reopen]').forEach((b) => (b.onclick = () => { const [d, p] = b.dataset.reopen.split('|'); startLesson(d, +p, lessons); }));
+  $$('[data-close]').forEach((b) => (b.onclick = async () => {
+    if (!confirm('이 수업을 끝낼까요? 접속한 학생은 모두 나가져요.')) return;
+    await closeLesson(b.dataset.close); tabLessons();
+  }));
+  $$('[data-ldel]').forEach((b) => (b.onclick = async () => {
+    if (!confirm('이 수업과 출석 기록을 삭제할까요? 되돌릴 수 없어요.')) return;
+    await deleteLesson(b.dataset.ldel); tabLessons();
+  }));
+  $$('[data-att]').forEach((b) => (b.onclick = () => showAttendance(b.dataset.att)));
+}
+async function startLesson(date, period, lessons) {
+  const open = lessons.find((l) => l.status === 'open');
+  if (open && !(open.date === date && open.period === period)
+      && !confirm(`${fmtDate(open.date)} ${open.period}교시 수업이 진행 중이에요. 그 수업을 끝내고 새 수업을 열까요?`)) return;
+  const w = window.open('about:blank', '_blank');
+  try {
+    const lid = await openLesson(cls.id, cls.name, date, period);
+    if (w) w.location = 'teacher.html?l=' + lid; else location.href = 'teacher.html?l=' + lid;
+    tabLessons();
+  } catch (er) { if (w) w.close(); alert(er.message); }
+}
+
+/* 수업 한 개의 출석 */
+async function showAttendance(lid) {
+  const l = { id: lid, ...(await get(r('lessons/' + lid))).val() };
+  const d = await lessonData(l);
+  const rows = attRows(l, cls.roster, d.members, d.att), c = countOf(rows);
+  const opt = (x) => `<select data-sid="${esc(x.id)}">
+      <option value="">자동 (${STATUS[x.auto]})</option>
+      ${Object.entries(STATUS).map(([k, v]) => `<option value="${k}" ${x.manual === k ? 'selected' : ''}>${v}</option>`).join('')}
+    </select>`;
+  openModal(`
+    <div class="row"><h3 style="margin:0">${esc(cls.name)} · ${fmtDate(l.date)} ${l.period}교시</h3>
+      <span class="small muted">${l.status === 'open' ? '진행 중' : '끝남'} · 연 시각 ${fmtTime(l.openedAt)}</span>
+      <span class="spacer"></span><button id="mClose">닫기</button></div>
+    <div class="row small" style="margin:10px 0">수업을 연 뒤 <input type="number" id="lateMin" value="${l.lateMin ?? 10}" min="0" max="60" style="width:64px"> 분이 지나 처음 들어오면 지각
+      <button class="small" id="lateSave">적용</button><span class="spacer"></span>${countsHtml(c)}</div>
+    <table class="stu-table"><thead><tr><th>학번</th><th>이름</th><th>출석</th><th>처음 접속</th><th>시청 시간</th><th>이탈</th></tr></thead><tbody>
+      ${rows.map((x) => `<tr><td>${esc(x.id)}</td><td>${esc(x.name)}</td><td>${stBadge(x.status)} ${opt(x)}</td>
+        <td>${fmtTime(x.first)}</td><td>${x.first ? fmtDur(x.activeMs) + (x.ratio != null ? ` <span class="muted small">(${Math.round(x.ratio * 100)}%)</span>` : '') : ''}</td>
+        <td>${x.away ? x.away + '회' : ''}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">학생 명단이 비어 있어요.</td></tr>'}
+    </tbody></table>
+    <div class="small muted" style="margin-top:8px">시청 시간 = 수업 화면을 실제로 보고 있던 시간 (다른 탭·창으로 나간 시간 제외). 수업 화면(선생님)이 열려 있는 동안 기록돼요.</div>`);
+  $('#mClose').onclick = closeModal;
+  $$('#modalBox select[data-sid]').forEach((s) => (s.onchange = async () => {
+    await update(r(`att/${lid}/${skey(s.dataset.sid)}`), { manual: s.value || null });
+    showAttendance(lid); if (tab === 'lessons') tabLessons(); if (tab === 'book') tabBook();
+  }));
+  $('#lateSave').onclick = async () => {
+    await update(r('lessons/' + lid), { lateMin: Math.max(0, +$('#lateMin').value || 0) });
+    showAttendance(lid); if (tab === 'lessons') tabLessons(); if (tab === 'book') tabBook();
+  };
+}
+
+/* 📋 출석부 */
+async function tabBook() {
+  const id = cls.id;
+  const lessons = (await classLessons(id)).sort((a, b) => a.date.localeCompare(b.date) || a.period - b.period);
+  const data = await Promise.all(lessons.map(lessonData));
+  if (!cls || cls.id !== id) return;
+  if (!lessons.length) { $('#tabBody').innerHTML = '<div class="muted">아직 수업 기록이 없어요.</div>'; return; }
+  const students = Object.values(cls.roster).sort((a, b) => String(a.sid).localeCompare(String(b.sid)));
+  const cells = lessons.map((l, i) => Object.fromEntries(attRows(l, cls.roster, data[i].members, data[i].att).map((x) => [x.id, x.status])));
+  const short = { present: '○', late: '지', absent: '✕', early: '조' };
+  const tot = (sid) => { const t = { present: 0, late: 0, absent: 0, early: 0 }; cells.forEach((c) => t[c[sid]]++); return t; };
+  $('#tabBody').innerHTML = `
+    <div class="row" style="margin-bottom:8px"><span class="small muted">○ 출석 · 지 지각 · ✕ 결석 · 조 조퇴 — 칸을 누르면 그 수업 출석을 볼 수 있어요</span>
+      <span class="spacer"></span><button id="csvBtn">⬇ 엑셀(CSV) 내려받기</button></div>
+    <div class="book-wrap"><table class="book">
+      <thead><tr><th>학번</th><th>이름</th>${lessons.map((l) => `<th data-l="${l.id}" style="cursor:pointer">${fmtDate(l.date)}<br>${l.period}교시</th>`).join('')}
+        <th>출석</th><th>지각</th><th>결석</th><th>조퇴</th></tr></thead>
+      <tbody>${students.map((s) => { const t = tot(s.sid); return `<tr><td>${esc(s.sid)}</td><td>${esc(s.name)}</td>
+        ${lessons.map((l, i) => { const v = cells[i][s.sid]; return `<td class="c-${v}" data-l="${l.id}" style="cursor:pointer">${short[v]}</td>`; }).join('')}
+        <td>${t.present}</td><td>${t.late}</td><td>${t.absent}</td><td>${t.early}</td></tr>`; }).join('')}</tbody>
+    </table></div>`;
+  $$('#tabBody [data-l]').forEach((el) => (el.onclick = () => showAttendance(el.dataset.l)));
+  $('#csvBtn').onclick = () => {
+    const q = (v) => `"${String(v).replace(/"/g, '""')}"`;
+    const head = ['학번', '이름', ...lessons.map((l) => `${l.date} ${l.period}교시`), '출석', '지각', '결석', '조퇴'];
+    const lines = [head.map(q).join(',')];
+    students.forEach((s) => { const t = tot(s.sid); lines.push([s.sid, s.name, ...cells.map((c) => STATUS[c[s.sid]]), t.present, t.late, t.absent, t.early].map(q).join(',')); });
+    const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `출석부_${cls.name}_${todayStr()}.csv`; a.click();
+  };
+}
+
+/* 👥 학생 명단 */
+function tabStudents() {
+  const id = cls.id;
+  const list = Object.values(cls.roster).sort((a, b) => String(a.sid).localeCompare(String(b.sid)));
+  $('#tabBody').innerHTML = `
+    <div><b>학생 등록</b> <span class="small muted">한 줄에 "학번 이름". 엑셀에서 두 열을 복사해 붙여 넣어도 돼요.</span></div>
+    <textarea class="bulk" id="bulk" placeholder="20301 김민준&#10;20302 이서연"></textarea>
+    <div class="row"><button class="primary" id="addBtn">등록</button></div>
+    <table class="stu-table" style="margin-top:12px"><thead><tr><th>학번</th><th>이름</th><th></th></tr></thead><tbody>
+    ${list.map((s) => `<tr><td>${esc(s.sid)}</td><td>${esc(s.name)}</td><td style="text-align:right"><button class="small danger" data-del="${esc(s.sid)}">삭제</button></td></tr>`).join('')
+      || '<tr><td colspan="3" class="muted">등록된 학생이 없어요.</td></tr>'}
+    </tbody></table>`;
+  $('#addBtn').onclick = async () => {
+    const u = {}, skipped = []; let n = 0;
+    for (const raw of $('#bulk').value.split(/\r?\n/)) {
+      const line = raw.trim(); if (!line) continue;
+      const parts = line.split(/[\s,;\t]+/).filter(Boolean);
+      // 숫자가 든 칸 중 가장 긴 것 = 학번 (번호·학번·이름 세 칸이어도, 이름·학번 순서여도 됨), 숫자 없는 칸 = 이름
+      const nums = parts.filter((p) => /^[0-9A-Za-z_-]+$/.test(p) && /\d/.test(p)).sort((a, b) => b.length - a.length);
+      const name = parts.filter((p) => !/\d/.test(p)).join('');
+      if (!nums.length || !name || /^(학번|이름|번호|성명)$/.test(name)) { skipped.push(line); continue; }
+      const sid = nums[0];
+      u[`rosters/${id}/${skey(sid)}`] = { sid, name, n: normName(name) }; n++;
+    }
+    if (!n) { alert('등록할 줄을 찾지 못했어요.\n한 줄에 "학번 이름" 모양으로 넣어 주세요. (예: 20301 김민준)'); return; }
+    try {
+      await update(r(''), u);
+    } catch (er) { alert('저장하지 못했어요: ' + er.message); return; }
+    toast(`${n}명 등록했어요.` + (skipped.length ? ` (건너뛴 줄 ${skipped.length}개)` : ''));
+    if (skipped.length) alert('이 줄들은 학번이나 이름을 찾지 못해 건너뛰었어요:\n\n' + skipped.slice(0, 20).join('\n'));
+    openClass(id);
+  };
+  $$('[data-del]').forEach((b) => (b.onclick = async () => {
+    if (!confirm(b.dataset.del + ' 학생을 명단에서 삭제할까요?')) return;
+    await remove(r(`rosters/${id}/${skey(b.dataset.del)}`)); openClass(id);
+  }));
+}
+
+/* 📄 자료 */
+async function tabDecks() {
+  const id = cls.id;
+  const decks = (await get(r('decks/' + id))).val() || {};
+  $('#tabBody').innerHTML = `
+    <div class="row"><button class="primary" id="upBtn">⬆ 자료 올리기 (PDF·이미지)</button><input type="file" id="upIn" accept=".pdf,image/*,.ppt,.pptx" multiple hidden>
+      <span class="small" id="upMsg"></span></div>
+    <div class="small muted" style="margin-top:6px">PPT는 PowerPoint에서 <b>파일 → 다른 이름으로 저장 → PDF</b>로 저장한 뒤 올려 주세요.</div>
+    <ul style="margin:10px 0 0;padding-left:18px">${Object.entries(decks).map(([did, d]) => `<li style="margin:4px 0">${esc(d.name)} <span class="muted small">${d.pages.length}장</span>
+      <button class="small danger" data-deck="${did}">삭제</button></li>`).join('') || '<li class="muted">없음</li>'}</ul>`;
+  $('#upBtn').onclick = () => $('#upIn').click();
+  $('#upIn').onchange = async () => {
+    const files = [...$('#upIn').files]; if (!files.length) return;
+    $('#upBtn').disabled = true;
+    try { const d = await uploadDeck(id, files, (m) => ($('#upMsg').textContent = '⏳ ' + m)); toast(`${d.pages.length}장 올렸어요.`); tabDecks(); }
+    catch (er) { $('#upMsg').textContent = '❌ ' + er.message; $('#upBtn').disabled = false; }
+  };
+  $$('[data-deck]').forEach((b) => (b.onclick = async () => {
+    if (!confirm('이 자료를 삭제할까요?')) return;
+    await deleteDeck(id, b.dataset.deck); tabDecks();
+  }));
+}
+start();
+</script>
+</body>
+</html>
