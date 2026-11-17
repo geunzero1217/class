@@ -12,6 +12,7 @@
     <b id="className"></b>
     <span id="me" class="muted"></span>
     <span class="spacer"></span>
+    <span class="pill" id="shareSt" hidden></span>
     <button id="fsBtn">⛶ 전체 화면</button>
     <button id="logoutBtn">나가기</button>
   </div>
@@ -69,7 +70,7 @@ $('#fsBtn').onclick = () => { if (document.fullscreenElement) document.exitFulls
 
 /* 화면 상태 */
 const stage = new Stage($('#stageWrap'));
-let st = { mode: 'wait' }, deck = null, deckId = null, key = null, videoReady = false, relay = false;
+let st = { mode: 'wait' }, deck = null, deckId = null, key = null, videoReady = false, relay = false, relayGot = false;
 const slides = new SlideCache(() => render());
 function render() {
   let slide = null;
@@ -78,6 +79,15 @@ function render() {
     for (let j = (st.page || 0) + 1; j < Math.min(deck.pages.length, (st.page || 0) + 3); j++) slides.url(st.deckId, j);
   }
   renderView(stage, st, deck, false, { videoReady, relay, slide });
+  // 화면 공유 받는 방식 표시
+  const ss = $('#shareSt'), sharing = st.mode === 'screen' && st.sharing;
+  ss.hidden = !sharing;
+  if (sharing) {
+    if (relay) { ss.textContent = relayGot ? '📷 사진으로 보는 중 (1초쯤 늦어요)' : '📷 사진 화면 받는 중…'; ss.className = 'pill warn'; }
+    else if (videoReady) { ss.textContent = '🎥 실시간 영상'; ss.className = 'pill ok'; }
+    else { ss.textContent = '⏳ 영상 연결 중…'; ss.className = 'pill'; }
+  }
+  if (sharing && relay && !relayGot) stage.show('msg', '📷 선생님 화면 사진을 받는 중…<br><span class="small">영상 연결이 안 돼서 사진으로 보여 드려요</span>');
 }
 let deckUnsub = null;
 function watchDeck() {
@@ -114,11 +124,15 @@ function closePc() {
 }
 function setRelay(on) {
   if (on === relay) return;
-  relay = on;
+  relay = on; relayGot = false;
   const wantRef = r(`relay/${lid}/want/${uid}`);
   if (on) {
     set(wantRef, true).catch(() => {}); onDisconnect(wantRef).remove();
-    frameUnsub = onValue(r(`relay/${lid}/frame`), (s) => { const f = s.val(); if (f && f.d) stage.relayImg.src = f.d; });
+    frameUnsub = onValue(r(`relay/${lid}/frame`), (s) => {
+      const f = s.val(); if (!f || !f.d) return;
+      stage.relayImg.src = f.d;
+      if (!relayGot) { relayGot = true; render(); }
+    });
   } else {
     remove(wantRef).catch(() => {});
     if (frameUnsub) { frameUnsub(); frameUnsub = null; }
@@ -141,12 +155,12 @@ async function requestRtc() {
     const o = s.val();
     if (!o || o.shareId !== myShare || pc) return;
     const my = pc = new RTCPeerConnection({ iceServers });
-    my.ontrack = (e) => { stage.video.srcObject = e.streams[0] || new MediaStream([e.track]); stage.video.play().catch(() => {}); videoReady = true; render(); };
+    my.ontrack = (e) => { stage.video.srcObject = e.streams[0] || new MediaStream([e.track]); stage.video.play().catch(() => {}); if (my.connectionState === 'connected') { videoReady = true; render(); } };
     my.onicecandidate = (e) => { if (e.candidate) set(r(`rtc/${lid}/${uid}/sc/${Date.now()}${Math.random().toString(36).slice(2, 6)}`), e.candidate.toJSON()).catch(() => {}); };
     my.onconnectionstatechange = () => {
       if (pc !== my) return;
-      if (my.connectionState === 'connected') { clearTimeout(rtcTimer); setRelay(false); }
-      else if (my.connectionState === 'failed') setRelay(true);
+      if (my.connectionState === 'connected') { clearTimeout(rtcTimer); videoReady = !!stage.video.srcObject; setRelay(false); render(); }
+      else if (my.connectionState === 'failed') { videoReady = false; setRelay(true); }
     };
     await my.setRemoteDescription({ type: o.type, sdp: o.sdp });
     const ans = await my.createAnswer();

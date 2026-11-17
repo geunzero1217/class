@@ -7,7 +7,10 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 
 function toast(msg, ms = 2600) {
   let t = $('#toast');
-  if (!t) { t = document.createElement('div'); t.id = 'toast'; document.body.appendChild(t); }
+  if (!t) { t = document.createElement('div'); t.id = 'toast'; }
+  // 전체 화면 중에는 전체 화면 요소 안에 있어야 보임
+  const host = document.fullscreenElement || document.body;
+  if (t.parentNode !== host) host.appendChild(t);
   t.textContent = msg; t.classList.add('show');
   clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), ms);
 }

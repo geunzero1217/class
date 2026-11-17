@@ -92,6 +92,12 @@
       </div>
 
       <div class="mini" id="mini" title="클릭하면 접기/펴기"></div>
+      <div class="pip-hint" id="pipHint" hidden>
+        <button id="pipHintBtn">📌 학생 현황 창 띄우기</button>
+        <div class="txt">다른 프로그램을 시연하는 동안에도 화면 위에 작게 떠 있어서<br>이탈한 학생을 바로 볼 수 있어요.</div>
+        <div class="txt warn">⚠ <b>전체 화면</b>을 공유하면 이 작은 창도 학생 화면에 보여요.<br>학생 이름이 보이는 게 싫으면 화면 구석(공유 안 하는 모니터)에 두세요.</div>
+        <button id="pipHintX" class="x" title="닫기">✕</button>
+      </div>
     </main>
 
     <aside class="roster">
@@ -313,6 +319,14 @@ live.addEventListener('pointerleave', () => { if (tool === 'laser') sendPointer(
 function undo() {
   for (let i = myStack.length - 1; i >= 0; i--) {
     const it = myStack[i];
+    if (it.key === key && it.clear) {   // '모두 지우기' 되돌리기 → 지운 획을 다시 저장
+      myStack.splice(i, 1);
+      const u = {};
+      it.clear.forEach(([id, s]) => { stage.ink.strokes.set(id, s); u[`ink/${lid}/${key}/${id}`] = { t: s.t, c: s.c, s: s.s, p: encPts(s.pts), done: true }; });
+      stage.ink.renderAll();
+      update(r(''), u).catch((e) => toast('복구 실패: ' + e.message));
+      toast('↶ 지운 필기를 다시 살렸어요'); return;
+    }
     if (it.key === key && stage.ink.strokes.has(it.id)) {
       myStack.splice(i, 1); stage.ink.remove(it.id); remove(r(`ink/${lid}/${key}/${it.id}`)).catch(() => {}); return;
     }
@@ -322,8 +336,11 @@ function undo() {
 $('#undoBtn').onclick = undo;
 $('#clearBtn').onclick = () => {
   if (!key || !stage.ink.strokes.size) return;
-  if (!confirm('이 쪽의 필기를 모두 지울까요?')) return;
+  // 확인 창(confirm)을 띄우면 전체 화면이 풀려서, 바로 지우고 되돌리기로 살릴 수 있게 함
+  const saved = [...stage.ink.strokes].filter(([, s]) => s.done);
+  if (saved.length) myStack.push({ key, clear: saved });
   stage.ink.clear(); remove(r(`ink/${lid}/${key}`)).catch(() => {});
+  toast('🗑 모두 지웠어요 · 실수였다면 ↶ 되돌리기(Ctrl+Z)', 4000);
 };
 
 /* 전체 화면 / 단축키 */
@@ -357,8 +374,10 @@ async function startShare() {
   stage.video.srcObject = stream;
   await new Promise((res) => { if (stage.video.videoWidth) res(); else stage.video.onloadedmetadata = () => res(); setTimeout(res, 1500); });
   await remove(r('rtc/' + lid)).catch(() => {});
+  relayBytes = 0;
   setState({ mode: 'screen', sharing: true, shareId: Date.now(), aspect: videoAspect() });
   updateShareInfo(); if (relayWant > 0) startRelay();
+  if (!(pipWin && !pipWin.closed)) $('#pipHint').hidden = false;
 }
 function videoAspect() { const v = stage.video; return v.videoWidth && v.videoHeight ? v.videoWidth / v.videoHeight : 16 / 9; }
 stage.video.addEventListener('resize', () => { if (stream && st.mode === 'screen') { const a = videoAspect(); if (Math.abs(a - (st.aspect || 0)) > 0.01) setState({ aspect: a }); } });
@@ -366,7 +385,7 @@ function stopShare() {
   if (stream) stream.getTracks().forEach((t) => t.stop());
   stream = null; stage.video.srcObject = null;
   peers.forEach((p) => p.pc.close()); peers.clear();
-  stopRelay(); $('#shareInfo').textContent = '';
+  stopRelay(); $('#shareInfo').textContent = ''; $('#pipHint').hidden = true;
   if (!ended) { remove(r('rtc/' + lid)).catch(() => {}); remove(r(`relay/${lid}/frame`)).catch(() => {}); }
   if (st.mode === 'screen' && !ended) setState({ sharing: false }); else applyLocal();
 }
@@ -408,30 +427,70 @@ onValue(r(`relay/${lid}/want`), (s) => { relayWant = s.size || 0; if (relayWant 
 function updateShareInfo() {
   if (!stream) return;
   const n = [...peers.values()].filter((p) => p.pc.connectionState === 'connected').length;
-  $('#shareInfo').textContent = `🔴 공유 중 · 영상 연결 ${n}명` + (relayWant ? ` · 우회 전송 ${relayWant}명` : '');
+  $('#shareInfo').textContent = `🔴 공유 중 · 영상 연결 ${n}명` + (relayWant ? ` · 📷 사진 전송 ${relayWant}명` : '')
+    + (relayBytes > 1e6 ? ` (지금까지 약 ${Math.round(relayBytes / 1e6)}MB)` : '');
+  $('#shareInfo').title = '📷 사진 전송 = 영상 연결이 안 되는 학생에게 1.2초마다 화면 사진을 보내는 것. Firebase 무료 사용량을 씁니다.';
 }
+/* 타이머는 Worker 안에서 돌림 (선생님 탭이 뒤로 가도 느려지지 않게).
+   화면은 MediaStreamTrackProcessor 로 트랙에서 직접 받음 → 탭이 뒤에 있어도(다른 프로그램 시연 중) 계속 최신 화면.
+   (예전 ImageCapture.grabFrame() 은 화면이 멈춰 있으면 새 프레임이 올 때까지 끝나지 않아 전송이 멈출 수 있었음)
+   화면이 바뀌지 않았으면 보내지 않음 → Firebase 무료 사용량(월 10GB 내려받기) 절약 */
 const ticker = new Worker(URL.createObjectURL(new Blob(['let h;onmessage=e=>{clearInterval(h);if(e.data>0)h=setInterval(()=>postMessage(0),e.data)}'], { type: 'text/javascript' })));
 let relayOn = false, capBusy = false, imageCapture = null;
+let relayTrack = null, frameReader = null, lastFrame = null, frameSeq = 0, sentSeq = -1, relayBytes = 0;
 const capCanvas = document.createElement('canvas');
 function startRelay() {
-  if (relayOn) return; relayOn = true;
-  try { imageCapture = window.ImageCapture ? new ImageCapture(stream.getVideoTracks()[0]) : null; } catch (_) { imageCapture = null; }
+  if (relayOn || !stream) return; relayOn = true; sentSeq = -1;
+  const track = stream.getVideoTracks()[0];
+  frameReader = null; imageCapture = null;
+  if (window.MediaStreamTrackProcessor) {
+    try {
+      relayTrack = track.clone();
+      const reader = frameReader = new MediaStreamTrackProcessor({ track: relayTrack }).readable.getReader();
+      (async () => {
+        try {
+          for (;;) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            if (frameReader !== reader) { value.close(); break; }
+            if (lastFrame) lastFrame.close();
+            lastFrame = value; frameSeq++;
+          }
+        } catch (_) { /* */ }
+      })();
+    } catch (_) { frameReader = null; if (relayTrack) relayTrack.stop(); relayTrack = null; }
+  }
+  if (!frameReader) { try { imageCapture = window.ImageCapture ? new ImageCapture(track) : null; } catch (_) { imageCapture = null; } }
   ticker.postMessage(1200);
 }
-function stopRelay() { relayOn = false; ticker.postMessage(0); imageCapture = null; }
+function stopRelay() {
+  relayOn = false; ticker.postMessage(0); imageCapture = null;
+  if (frameReader) { frameReader.cancel().catch(() => {}); frameReader = null; }
+  if (relayTrack) { relayTrack.stop(); relayTrack = null; }
+  if (lastFrame) { lastFrame.close(); lastFrame = null; }
+}
+const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
 ticker.onmessage = async () => {
   if (!relayOn || capBusy || !stream) return;
   capBusy = true;
   try {
-    let src = null, w, h;
-    if (imageCapture) { try { src = await imageCapture.grabFrame(); w = src.width; h = src.height; } catch (_) { src = null; } }
+    let src = null, w, h, own = false;
+    if (frameReader) {
+      if (!lastFrame || frameSeq === sentSeq) return;          // 새 화면 없음 → 안 보냄
+      src = lastFrame; w = src.displayWidth; h = src.displayHeight; sentSeq = frameSeq;
+    } else if (imageCapture) {
+      try { src = await withTimeout(imageCapture.grabFrame(), 2000); w = src.width; h = src.height; own = true; } catch (_) { src = null; }
+    }
     if (!src) { src = stage.video; w = src.videoWidth; h = src.videoHeight; }
     if (!w || !h) return;
     const sc = Math.min(1, 960 / w);
     capCanvas.width = Math.round(w * sc); capCanvas.height = Math.round(h * sc);
     capCanvas.getContext('2d').drawImage(src, 0, 0, capCanvas.width, capCanvas.height);
-    if (src.close) src.close();
-    await set(r(`relay/${lid}/frame`), { d: capCanvas.toDataURL('image/jpeg', 0.5), t: serverTimestamp() });
+    if (own && src.close) src.close();
+    const d = capCanvas.toDataURL('image/jpeg', 0.5);
+    relayBytes += d.length * Math.max(1, relayWant);
+    await set(r(`relay/${lid}/frame`), { d, t: serverTimestamp() });
+    updateShareInfo();
   } catch (_) { /* */ } finally { capBusy = false; }
 };
 
@@ -519,11 +578,24 @@ function renderRoster() {
   const out = list.filter((s) => s.state === 'away' || s.state === 'left');
   $('#mini').innerHTML = `<div class="mc">${html}</div><ul>${(out.length ? out : list.filter((s) => s.state !== 'none')).slice(0, 40)
     .map((s) => `<li class="${s.state}"><i></i>${esc(s.name)}</li>`).join('')}</ul>`;
-  if (pipWin && !pipWin.closed) {
-    const d = pipWin.document, h = d.getElementById('pc'), l = d.getElementById('pl');
-    if (h) h.innerHTML = html;
-    if (l) l.innerHTML = rosterItems(list);
-  }
+  if (pipWin && !pipWin.closed) renderPip(list, c);
+}
+/* 작은 현황 창: 인원 수 + 이탈 학생 이름을 크게 */
+function renderPip(list, c) {
+  const d = pipWin.document, box = d.getElementById('pip');
+  if (!box) return;
+  const t = now();
+  const out = list.filter((s) => s.state === 'away' || s.state === 'left');
+  const none = list.filter((s) => s.state === 'none');
+  let body;
+  if (out.length) {
+    body = `<div class="pip-title">🔴 이탈 ${out.length}명</div>` + out.map((s) => `<div class="pip-out${flashIds.has(s.id) ? ' flash' : ''}">
+      <b>${esc(s.name)}</b><span>${s.state === 'left' ? '나감' : '다른 창'} · ${ago(t - s.since)}${s.away > 1 ? ` · ${s.away}번째` : ''}</span></div>`).join('');
+  } else body = `<div class="pip-ok">${c.active ? '✅ 모두 보고 있어요' : '아직 들어온 학생이 없어요'}</div>`;
+  if (none.length && none.length < list.length) body += `<div class="pip-none">⚪ 미접속 ${none.length}명: ${none.slice(0, 12).map((s) => esc(s.name)).join(', ')}${none.length > 12 ? ' …' : ''}</div>`;
+  box.innerHTML = `<div class="pip-counts"><span class="g">🟢 ${c.active}</span><span class="r">🔴 ${c.out}</span><span class="n">⚪ ${c.none}</span></div><div class="pip-body">${body}</div>`;
+  d.body.classList.toggle('alert', flashIds.size > 0);
+  d.title = (c.out ? `🔴${c.out} ` : '') + '학생 현황';
 }
 setInterval(renderRoster, 10000);
 $('#optSort').onchange = renderRoster;
@@ -543,10 +615,11 @@ function beep() {
 }
 
 /* 📌 다른 프로그램 위에 떠 있는 학생 목록 창 */
-$('#pipBtn').onclick = async () => {
+async function openPip() {
+  $('#pipHint').hidden = true;
   if (pipWin && !pipWin.closed) { pipWin.focus(); return; }
   let w = null;
-  try { if (window.documentPictureInPicture) w = await documentPictureInPicture.requestWindow({ width: 270, height: 460 }); } catch (_) { w = null; }
+  try { if (window.documentPictureInPicture) w = await documentPictureInPicture.requestWindow({ width: 260, height: 340 }); } catch (_) { w = null; }
   if (!w) {
     w = window.open('', 'rosterPip', 'width=280,height=480');
     if (!w) { alert('팝업이 차단되었어요. 주소창 오른쪽에서 팝업을 허용해 주세요.'); return; }
@@ -554,10 +627,14 @@ $('#pipBtn').onclick = async () => {
   }
   const link = w.document.createElement('link'); link.rel = 'stylesheet'; link.href = new URL('css/style.css', location.href).href;
   w.document.head.appendChild(link);
-  w.document.body.style.margin = '0';
-  w.document.body.innerHTML = '<div class="roster" style="width:100%;height:100vh;border:0"><div class="roster-head"><div class="counts" id="pc"></div></div><div class="roster-list" id="pl"></div></div>';
+  w.document.body.className = 'pip-page';
+  w.document.body.innerHTML = '<div id="pip"></div>';
+  w.addEventListener('pagehide', () => { if (pipWin === w) pipWin = null; });
   pipWin = w; renderRoster();
-};
+}
+$('#pipBtn').onclick = openPip;
+$('#pipHintBtn').onclick = openPip;
+$('#pipHintX').onclick = () => ($('#pipHint').hidden = true);
 
 /* 수업 코드 크게 보기 / 종료 */
 $('#codePill').onclick = () => {
