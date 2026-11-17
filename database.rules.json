@@ -1,0 +1,114 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "teachers": {
+      ".read": "auth != null && root.child('teachers').child(auth.uid).exists()",
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.token.firebase.sign_in_provider === 'google.com' && (root.child('teachers').child(auth.uid).exists() || (!root.child('teachers').exists() && auth.uid === $uid))"
+      }
+    },
+
+    "classes": {
+      ".read": "auth != null && root.child('teachers').child(auth.uid).exists()",
+      ".write": "auth != null && root.child('teachers').child(auth.uid).exists()"
+    },
+
+    "rosters": {
+      ".read": "auth != null && root.child('teachers').child(auth.uid).exists()",
+      ".write": "auth != null && root.child('teachers').child(auth.uid).exists()"
+    },
+
+    "decks": {
+      ".read": "auth != null && root.child('teachers').child(auth.uid).exists()",
+      ".write": "auth != null && root.child('teachers').child(auth.uid).exists()",
+      "$cid": { "$did": { ".read": "auth != null" } }
+    },
+
+    "slides": {
+      ".write": "auth != null && root.child('teachers').child(auth.uid).exists()",
+      "$did": { ".read": "auth != null" }
+    },
+
+    "lessons": {
+      ".read": "auth != null && root.child('teachers').child(auth.uid).exists()",
+      ".write": "auth != null && root.child('teachers').child(auth.uid).exists()",
+      ".indexOn": ["cid"],
+      "$lid": {
+        ".read": "auth != null && root.child('members').child($lid).child(auth.uid).exists()"
+      }
+    },
+
+    "codes": {
+      ".read": "auth != null && root.child('teachers').child(auth.uid).exists()",
+      ".write": "auth != null && root.child('teachers').child(auth.uid).exists()",
+      "$code": { ".read": "auth != null" }
+    },
+
+    "members": {
+      ".read": "auth != null && root.child('teachers').child(auth.uid).exists()",
+      ".write": "auth != null && root.child('teachers').child(auth.uid).exists()",
+      "$lid": {
+        "$uid": {
+          ".read": "auth != null && auth.uid === $uid",
+          ".write": "auth != null && auth.uid === $uid && !data.exists() && root.child('lessons').child($lid).child('status').val() === 'open'",
+          ".validate": "newData.hasChildren(['sid', 'n', 'at']) && newData.child('at').val() === now && root.child('rosters').child(root.child('lessons').child($lid).child('cid').val()).child('s' + newData.child('sid').val()).child('n').val() === newData.child('n').val()"
+        }
+      }
+    },
+
+    "presence": {
+      ".read": "auth != null && root.child('teachers').child(auth.uid).exists()",
+      ".write": "auth != null && root.child('teachers').child(auth.uid).exists()",
+      "$lid": {
+        "$uid": {
+          ".write": "auth != null && auth.uid === $uid && root.child('members').child($lid).child(auth.uid).exists()"
+        }
+      }
+    },
+
+    "att": {
+      ".read": "auth != null && root.child('teachers').child(auth.uid).exists()",
+      ".write": "auth != null && root.child('teachers').child(auth.uid).exists()"
+    },
+
+    "live": {
+      ".write": "auth != null && root.child('teachers').child(auth.uid).exists()",
+      "$lid": { ".read": "auth != null && (root.child('teachers').child(auth.uid).exists() || root.child('members').child($lid).child(auth.uid).exists())" }
+    },
+
+    "ink": {
+      ".write": "auth != null && root.child('teachers').child(auth.uid).exists()",
+      "$lid": { ".read": "auth != null && (root.child('teachers').child(auth.uid).exists() || root.child('members').child($lid).child(auth.uid).exists())" }
+    },
+
+    "pointer": {
+      ".write": "auth != null && root.child('teachers').child(auth.uid).exists()",
+      "$lid": { ".read": "auth != null && (root.child('teachers').child(auth.uid).exists() || root.child('members').child($lid).child(auth.uid).exists())" }
+    },
+
+    "rtc": {
+      ".read": "auth != null && root.child('teachers').child(auth.uid).exists()",
+      ".write": "auth != null && root.child('teachers').child(auth.uid).exists()",
+      "$lid": {
+        "$uid": {
+          ".read": "auth != null && auth.uid === $uid",
+          ".write": "auth != null && auth.uid === $uid && root.child('members').child($lid).child(auth.uid).exists()"
+        }
+      }
+    },
+
+    "relay": {
+      ".write": "auth != null && root.child('teachers').child(auth.uid).exists()",
+      "$lid": {
+        "frame": { ".read": "auth != null && (root.child('teachers').child(auth.uid).exists() || root.child('members').child($lid).child(auth.uid).exists())" },
+        "want": {
+          ".read": "auth != null && root.child('teachers').child(auth.uid).exists()",
+          "$uid": { ".write": "auth != null && auth.uid === $uid && root.child('members').child($lid).child(auth.uid).exists()" }
+        }
+      }
+    }
+  }
+}
