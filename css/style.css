@@ -207,7 +207,12 @@ textarea.bulk { width: 100%; min-height: 120px; resize: vertical; }
 .pip-out span { font-size: 12px; color: #6b7280; }
 .pip-out.flash { animation: flash 1s ease 3; }
 .pip-ok { font-size: 20px; font-weight: 700; color: #16a34a; text-align: center; padding: 18px 0; }
-.pip-none { font-size: 12px; color: #6b7280; margin-top: 4px; }
+.pip-sec { font-size: 13px; font-weight: 700; margin-top: 6px; }
+.pip-sec.g { color: #16a34a; } .pip-sec.n { color: #6b7280; }
+.pip-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.pip-chips span { font-size: 14px; padding: 2px 8px; border-radius: 99px; }
+.pip-chips .g { background: #e8f7ee; color: #166534; }
+.pip-chips .n { background: #f3f4f6; color: #6b7280; }
 
 /* 학생 화면 */
 .student-top { display: flex; gap: 10px; align-items: center; padding: 6px 12px; background: var(--top); color: var(--top-ink); font-size: 14px; flex-wrap: wrap; }

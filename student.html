@@ -70,7 +70,7 @@ $('#fsBtn').onclick = () => { if (document.fullscreenElement) document.exitFulls
 
 /* 화면 상태 */
 const stage = new Stage($('#stageWrap'));
-let st = { mode: 'wait' }, deck = null, deckId = null, key = null, videoReady = false, relay = false, relayGot = false;
+let st = { mode: 'wait' }, deck = null, deckId = null, key = null, videoReady = false, relay = false, relayGot = false, rtcFail = false;
 const slides = new SlideCache(() => render());
 function render() {
   let slide = null;
@@ -85,9 +85,11 @@ function render() {
   if (sharing) {
     if (relay) { ss.textContent = relayGot ? '📷 사진으로 보는 중 (1초쯤 늦어요)' : '📷 사진 화면 받는 중…'; ss.className = 'pill warn'; }
     else if (videoReady) { ss.textContent = '🎥 실시간 영상'; ss.className = 'pill ok'; }
+    else if (rtcFail) { ss.textContent = '⚠ 영상 연결 안 됨 · 다시 시도 중'; ss.className = 'pill bad'; }
     else { ss.textContent = '⏳ 영상 연결 중…'; ss.className = 'pill'; }
   }
   if (sharing && relay && !relayGot) stage.show('msg', '📷 선생님 화면 사진을 받는 중…<br><span class="small">영상 연결이 안 돼서 사진으로 보여 드려요</span>');
+  else if (sharing && !relay && !videoReady && rtcFail) stage.show('msg', '😥 선생님 화면에 연결하지 못했어요<br><b>학교 와이파이</b>에 연결했는지 확인해 주세요<br><span class="small">자동으로 계속 다시 시도하고 있어요</span>');
 }
 let deckUnsub = null;
 function watchDeck() {
@@ -113,9 +115,10 @@ onValue(r(`live/${lid}`), (s) => {
 });
 onValue(r(`pointer/${lid}`), (s) => { const p = s.val(); stage.showLaser(p && p.k === key ? p : null); });
 
-/* 화면 공유 받기: WebRTC → 9초 안에 안 되면 우회 전송(이미지) */
+/* 화면 공유 받기: WebRTC(영상) → 10초 안에 안 되면 안내를 띄우고 8초 뒤 다시 시도 (계속 반복)
+   선생님이 '사진 보내기'를 켜 두었으면 그동안 사진(우회 전송)으로 보여 줌 */
 const rtcRef = r(`rtc/${lid}/${uid}`);
-let pc = null, shareId = null, rtcTimer = null, offerUnsub = null, tcUnsub = null, frameUnsub = null;
+let pc = null, shareId = null, rtcTimer = null, offerUnsub = null, tcUnsub = null, frameUnsub = null, attempt = 0, discTimer = null;
 function closePc() {
   if (pc) { pc.close(); pc = null; }
   if (offerUnsub) { offerUnsub(); offerUnsub = null; }
@@ -142,30 +145,45 @@ function setRelay(on) {
 }
 function syncShare() {
   const want = st.mode === 'screen' && st.sharing;
-  if (!want) { clearTimeout(rtcTimer); closePc(); setRelay(false); if (shareId) remove(rtcRef).catch(() => {}); shareId = null; return; }
-  if (st.shareId !== shareId) { shareId = st.shareId; closePc(); setRelay(false); requestRtc(); }
+  if (!want) { clearTimeout(rtcTimer); closePc(); setRelay(false); rtcFail = false; if (shareId) remove(rtcRef).catch(() => {}); shareId = null; return; }
+  if (st.shareId !== shareId) { shareId = st.shareId; attempt = 0; rtcFail = false; closePc(); setRelay(false); requestRtc(); }
+  else setRelay(rtcFail && !!st.relay);   // 선생님이 '사진 보내기'를 켜거나 끈 경우
+}
+function onRtcFail(myShare, myN) {
+  if (shareId !== myShare || attempt !== myN) return;
+  if (pc && pc.connectionState === 'connected') return;
+  rtcFail = true; videoReady = false;
+  setRelay(!!st.relay); render();
+  clearTimeout(rtcTimer);
+  rtcTimer = setTimeout(() => { if (shareId === myShare && attempt === myN) requestRtc(); }, 8000);
 }
 async function requestRtc() {
-  await set(rtcRef, { req: shareId, t: serverTimestamp() });
+  const myShare = shareId, myN = ++attempt;
+  closePc(); render();
+  await remove(rtcRef).catch(() => {});
+  if (shareId !== myShare || attempt !== myN) return;
+  await set(rtcRef, { req: shareId, n: myN, t: serverTimestamp() });
   onDisconnect(rtcRef).remove();
   clearTimeout(rtcTimer);
-  rtcTimer = setTimeout(() => { if (!pc || pc.connectionState !== 'connected') setRelay(true); }, 9000);
-  const myShare = shareId;
+  rtcTimer = setTimeout(() => onRtcFail(myShare, myN), 10000);
   offerUnsub = onValue(r(`rtc/${lid}/${uid}/offer`), async (s) => {
     const o = s.val();
-    if (!o || o.shareId !== myShare || pc) return;
+    if (!o || o.shareId !== myShare || (o.n || 0) !== myN || pc) return;
     const my = pc = new RTCPeerConnection({ iceServers });
     my.ontrack = (e) => { stage.video.srcObject = e.streams[0] || new MediaStream([e.track]); stage.video.play().catch(() => {}); if (my.connectionState === 'connected') { videoReady = true; render(); } };
     my.onicecandidate = (e) => { if (e.candidate) set(r(`rtc/${lid}/${uid}/sc/${Date.now()}${Math.random().toString(36).slice(2, 6)}`), e.candidate.toJSON()).catch(() => {}); };
     my.onconnectionstatechange = () => {
       if (pc !== my) return;
-      if (my.connectionState === 'connected') { clearTimeout(rtcTimer); videoReady = !!stage.video.srcObject; setRelay(false); render(); }
-      else if (my.connectionState === 'failed') { videoReady = false; setRelay(true); }
+      const cs = my.connectionState;
+      clearTimeout(discTimer);
+      if (cs === 'connected') { clearTimeout(rtcTimer); rtcFail = false; videoReady = !!stage.video.srcObject; setRelay(false); render(); }
+      else if (cs === 'failed') onRtcFail(myShare, myN);
+      else if (cs === 'disconnected') discTimer = setTimeout(() => { if (pc === my && my.connectionState !== 'connected') onRtcFail(myShare, myN); }, 5000);
     };
     await my.setRemoteDescription({ type: o.type, sdp: o.sdp });
     const ans = await my.createAnswer();
     await my.setLocalDescription(ans);
-    await set(r(`rtc/${lid}/${uid}/answer`), { type: ans.type, sdp: ans.sdp, shareId: myShare });
+    await set(r(`rtc/${lid}/${uid}/answer`), { type: ans.type, sdp: ans.sdp, shareId: myShare, n: myN });
     const seen = new Set();
     tcUnsub = onValue(r(`rtc/${lid}/${uid}/tc`), (cs) => {
       cs.forEach((c) => { if (!seen.has(c.key)) { seen.add(c.key); my.addIceCandidate(c.val()).catch(() => {}); } });

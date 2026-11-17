@@ -63,6 +63,10 @@
           <button id="shareBtn" class="primary">▶ 화면 공유 시작</button>
           <button id="stopShareBtn" hidden>■ 공유 중지</button>
           <span id="shareInfo" class="small"></span>
+          <span class="sep"></span>
+          <label class="small" style="display:flex;gap:4px;align-items:center;cursor:pointer" title="영상 연결이 안 되는 학생에게 1.2초마다 화면 사진을 보내요. 화질이 낮고 Firebase 무료 사용량을 써요 (한 수업 300MB까지).">
+            <input type="checkbox" id="optRelay"> 📷 영상 안 되는 학생에게 사진 보내기</label>
+          <button id="micBtn" class="small" title="학교 와이파이에서 영상 연결이 잘 안 될 때 한 번 눌러 두세요">🔧 영상 연결 돕기</button>
         </div>
         <div class="grp" data-for="board">
           <button id="bPrev">◀</button>
@@ -176,6 +180,7 @@ function applyLocal() {
   $('#boardInfo').textContent = `${(st.board || 0) + 1} / ${st.boardCount || 1}`;
   if (st.mode === 'web' && document.activeElement !== $('#urlIn')) $('#urlIn').value = st.url || '';
   $('#shareBtn').hidden = !!stream; $('#stopShareBtn').hidden = !stream;
+  $('#optRelay').checked = !!st.relay;
 }
 
 $$('#modes button').forEach((b) => (b.onclick = () => {
@@ -185,7 +190,7 @@ $$('#modes button').forEach((b) => (b.onclick = () => {
   if (mode === 'slides' && (!st.deckId || !decks[st.deckId]) && ids.length) { patch.deckId = ids[ids.length - 1]; patch.page = 0; }
   if (mode === 'screen') patch.sharing = !!stream;
   setState(patch);
-  if (mode === 'screen' && !stream) startShare();
+  if (mode === 'screen' && !stream) shareClick();
   if (mode === 'web' && !st.url) setTimeout(() => $('#urlIn').focus(), 0);
 }));
 
@@ -364,6 +369,15 @@ document.addEventListener('keydown', (e) => {
 
 /* ───────── 화면 공유 (WebRTC, 신호는 Firebase로) ───────── */
 const peers = new Map();   // 학생 uid → { pc, shareId, answered, seen }
+/* [화면 공유 시작] 클릭: 공유 시작 + 학생 현황 창(다른 프로그램 위에 떠 있는 작은 창) 자동으로 띄우기 */
+// 같은 클릭 안에서 화면 고르기 → 현황 창 순서로 '동시에' 부름 (await 없이). 브라우저가 클릭 1번에 둘 다 허락하지 않으면
+// 화면 공유는 그대로 되고, 현황 창 대신 깜빡이는 안내 버튼이 뜸
+function shareClick() {
+  if (st.mode !== 'screen') setState({ mode: 'screen', sharing: false });
+  if (stream) return;
+  startShare();
+  openPip(true);
+}
 async function startShare() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) { alert('이 브라우저는 화면 공유를 지원하지 않아요. PC의 Chrome이나 Edge를 써 주세요.'); return; }
   try { stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 15, max: 30 } }, audio: false }); }
@@ -388,17 +402,32 @@ function stopShare() {
   if (!ended) { remove(r('rtc/' + lid)).catch(() => {}); remove(r(`relay/${lid}/frame`)).catch(() => {}); }
   if (st.mode === 'screen' && !ended) setState({ sharing: false }); else applyLocal();
 }
-$('#shareBtn').onclick = () => { if (st.mode !== 'screen') setState({ mode: 'screen', sharing: false }); startShare(); };
+$('#shareBtn').onclick = shareClick;
+$('#optRelay').onchange = () => {
+  const on = $('#optRelay').checked;
+  setState({ relay: on });
+  if (on && relayWant > 0 && stream) startRelay();
+  if (!on) { stopRelay(); remove(r(`relay/${lid}/frame`)).catch(() => {}); }
+  updateShareInfo();
+};
+// 크롬은 마이크 권한이 있는 페이지에서만 PC의 진짜 내부 주소를 알려 줌 → 같은 와이파이 학생과 직접 연결이 쉬워짐 (소리는 안 씀)
+$('#micBtn').onclick = async () => {
+  try {
+    const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+    s.getTracks().forEach((t) => t.stop());
+    toast('✅ 설정했어요. 학생들은 자동으로 다시 연결을 시도해요. (마이크 소리는 쓰지 않아요)', 5000);
+  } catch (_) { toast('마이크 권한이 허용되지 않았어요. 주소창 왼쪽 자물쇠 → 마이크 → 허용', 5000); }
+};
 $('#stopShareBtn').onclick = stopShare;
 
 async function onRtc(s) {
   const uid = s.key, v = s.val() || {};
   if (!stream || v.req !== st.shareId) return;
   let p = peers.get(uid);
-  if (!p || p.shareId !== v.req) {
+  if (!p || p.shareId !== v.req || p.n !== (v.n || 0)) {   // n = 학생의 재시도 번호
     if (p) p.pc.close();
     const pc = new RTCPeerConnection({ iceServers });
-    p = { pc, shareId: v.req, answered: false, seen: new Set() };
+    p = { pc, shareId: v.req, n: v.n || 0, answered: false, seen: new Set() };
     peers.set(uid, p);
     stream.getTracks().forEach((t) => pc.addTrack(t, stream));
     pc.getSenders().forEach((snd) => {
@@ -408,9 +437,9 @@ async function onRtc(s) {
     pc.onconnectionstatechange = () => updateShareInfo();
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-    await set(r(`rtc/${lid}/${uid}/offer`), { type: offer.type, sdp: offer.sdp, shareId: p.shareId });
+    await set(r(`rtc/${lid}/${uid}/offer`), { type: offer.type, sdp: offer.sdp, shareId: p.shareId, n: p.n });
   }
-  if (v.answer && v.answer.shareId === p.shareId && !p.answered) {
+  if (v.answer && v.answer.shareId === p.shareId && (v.answer.n || 0) === p.n && !p.answered) {
     p.answered = true;
     try { await p.pc.setRemoteDescription({ type: v.answer.type, sdp: v.answer.sdp }); } catch (_) { /* */ }
   }
@@ -422,11 +451,13 @@ onChildRemoved(r('rtc/' + lid), (s) => { const p = peers.get(s.key); if (p) { p.
 
 // 우회 전송: WebRTC가 막힌 학생이 있을 때만, 1.2초마다 화면 사진을 Firebase로
 let relayWant = 0;
-onValue(r(`relay/${lid}/want`), (s) => { relayWant = s.size || 0; if (relayWant > 0 && stream) startRelay(); else stopRelay(); updateShareInfo(); });
+onValue(r(`relay/${lid}/want`), (s) => { relayWant = s.size || 0; if (relayWant > 0 && stream && st.relay) startRelay(); else stopRelay(); updateShareInfo(); });
 function updateShareInfo() {
   if (!stream) return;
-  const n = [...peers.values()].filter((p) => p.pc.connectionState === 'connected').length;
-  $('#shareInfo').textContent = `🔴 공유 중 · 영상 연결 ${n}명` + (relayWant ? ` · 📷 사진 전송 ${relayWant}명` : '')
+  const all = [...peers.values()], n = all.filter((p) => p.pc.connectionState === 'connected').length;
+  const bad = all.length - n;
+  $('#shareInfo').textContent = `🔴 공유 중 · 영상 연결 ${n}명` + (bad ? ` · 연결 중/안 됨 ${bad}명` : '')
+    + (relayWant && st.relay ? ` · 📷 사진 전송 ${relayWant}명` : '')
     + (relayBytes > 1e6 ? ` (지금까지 약 ${Math.round(relayBytes / 1e6)}MB)` : '')
     + (relayCapped ? ' · ⛔ 사진 전송 한도 도달로 멈춤' : '');
   $('#shareInfo').title = '📷 사진 전송 = 영상 연결이 안 되는 학생에게 1.2초마다 화면 사진을 보내는 것. Firebase 무료 사용량을 씁니다.';
@@ -441,7 +472,7 @@ let relayTrack = null, frameReader = null, lastFrame = null, frameSeq = 0, sentS
 const RELAY_LIMIT = 300e6;   // 한 수업(이 화면을 연 동안) 사진 전송 한도: 300MB
 const capCanvas = document.createElement('canvas');
 function startRelay() {
-  if (relayOn || !stream || relayCapped) return; relayOn = true; sentSeq = -1;
+  if (relayOn || !stream || relayCapped || !st.relay) return; relayOn = true; sentSeq = -1;
   const track = stream.getVideoTracks()[0];
   frameReader = null; imageCapture = null;
   if (window.MediaStreamTrackProcessor) {
@@ -598,7 +629,9 @@ function renderPip(list, c) {
     body = `<div class="pip-title">🔴 이탈 ${out.length}명</div>` + out.map((s) => `<div class="pip-out${flashIds.has(s.id) ? ' flash' : ''}">
       <b>${esc(s.name)}</b><span>${s.state === 'left' ? '나감' : '다른 창'} · ${ago(t - s.since)}${s.away > 1 ? ` · ${s.away}번째` : ''}</span></div>`).join('');
   } else body = `<div class="pip-ok">${c.active ? '✅ 모두 보고 있어요' : '아직 들어온 학생이 없어요'}</div>`;
-  if (none.length && none.length < list.length) body += `<div class="pip-none">⚪ 미접속 ${none.length}명: ${none.slice(0, 12).map((s) => esc(s.name)).join(', ')}${none.length > 12 ? ' …' : ''}</div>`;
+  const act = list.filter((s) => s.state === 'active');
+  if (act.length) body += `<div class="pip-sec g">🟢 보는 중 ${act.length}명</div><div class="pip-chips">${act.map((s) => `<span class="g">${esc(s.name)}</span>`).join('')}</div>`;
+  if (none.length) body += `<div class="pip-sec n">⚪ 아직 안 들어옴 ${none.length}명</div><div class="pip-chips">${none.map((s) => `<span class="n">${esc(s.name)}</span>`).join('')}</div>`;
   box.innerHTML = `<div class="pip-counts"><span class="g">🟢 ${c.active}</span><span class="r">🔴 ${c.out}</span><span class="n">⚪ ${c.none}</span></div><div class="pip-body">${body}</div>`;
   d.body.classList.toggle('alert', flashIds.size > 0);
   d.title = (c.out ? `🔴${c.out} ` : '') + '학생 현황';
@@ -621,14 +654,17 @@ function beep() {
 }
 
 /* 📌 다른 프로그램 위에 떠 있는 학생 목록 창 */
-async function openPip() {
-  $('#pipHint').hidden = true;
-  if (pipWin && !pipWin.closed) { pipWin.focus(); return; }
+// auto = 화면 공유 시작과 함께 자동으로 여는 경우 (항상 위에 뜨는 창을 못 만들면 조용히 넘어가고 안내만 띄움)
+// 새로 열었으면 true
+async function openPip(auto = false) {
+  if (pipWin && !pipWin.closed) { if (!auto) pipWin.focus(); $('#pipHint').hidden = true; return false; }
   let w = null;
-  try { if (window.documentPictureInPicture) w = await documentPictureInPicture.requestWindow({ width: 260, height: 340 }); } catch (_) { w = null; }
+  try { if (window.documentPictureInPicture) w = await documentPictureInPicture.requestWindow({ width: 300, height: 460 }); } catch (_) { w = null; }
+  if (!w && auto) return false;
+  $('#pipHint').hidden = true;
   if (!w) {
     w = window.open('', 'rosterPip', 'width=280,height=480');
-    if (!w) { alert('팝업이 차단되었어요. 주소창 오른쪽에서 팝업을 허용해 주세요.'); return; }
+    if (!w) { alert('팝업이 차단되었어요. 주소창 오른쪽에서 팝업을 허용해 주세요.'); return false; }
     w.document.open(); w.document.write('<!doctype html><meta charset="utf-8"><title>학생 현황</title><body></body>'); w.document.close();
   }
   const link = w.document.createElement('link'); link.rel = 'stylesheet'; link.href = new URL('css/style.css', location.href).href;
@@ -637,9 +673,10 @@ async function openPip() {
   w.document.body.innerHTML = '<div id="pip"></div>';
   w.addEventListener('pagehide', () => { if (pipWin === w) pipWin = null; });
   pipWin = w; renderRoster();
+  return true;
 }
-$('#pipBtn').onclick = openPip;
-$('#pipHintBtn').onclick = openPip;
+$('#pipBtn').onclick = () => openPip();
+$('#pipHintBtn').onclick = () => openPip();
 $('#pipHintX').onclick = () => ($('#pipHint').hidden = true);
 
 /* 수업 코드 크게 보기 / 종료 */
