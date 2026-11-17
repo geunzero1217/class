@@ -597,7 +597,7 @@ function rosterList() {
 function countsHtml(list) {
   const c = { active: 0, out: 0, none: 0 };
   list.forEach((s) => (s.state === 'active' ? c.active++ : s.state === 'none' ? c.none++ : c.out++));
-  return { c, html: `<span style="color:var(--green)">🟢 ${c.active}</span><span style="color:var(--red)">🔴 ${c.out}</span><span class="muted">⚪ ${c.none}</span>` };
+  return { c, html: `<span class="cnt on" title="보는 중"><i></i>${c.active}</span><span class="cnt out" title="다른 창·나감"><i></i>${c.out}</span><span class="cnt none" title="안 들어옴"><i></i>${c.none}</span>` };
 }
 function rosterItems(list) {
   const t = now();
@@ -615,26 +615,18 @@ function renderRoster() {
   const out = list.filter((s) => s.state === 'away' || s.state === 'left');
   $('#mini').innerHTML = `<div class="mc">${html}</div><ul>${(out.length ? out : list.filter((s) => s.state !== 'none')).slice(0, 40)
     .map((s) => `<li class="${s.state}"><i></i>${esc(s.name)}</li>`).join('')}</ul>`;
-  if (pipWin && !pipWin.closed) renderPip(list, c);
+  if (pipWin && !pipWin.closed) renderPip(list);
 }
-/* 작은 현황 창: 인원 수 + 이탈 학생 이름을 크게 */
-function renderPip(list, c) {
+/* 작은 현황 창: 출석부 순서(학번)로 이름을 한 줄로 쭉. 보는 중 = 초록, 그 외(안 들어옴·다른 창·나감) = 빨강 */
+function renderPip(list) {
   const d = pipWin.document, box = d.getElementById('pip');
   if (!box) return;
-  const t = now();
-  const out = list.filter((s) => s.state === 'away' || s.state === 'left');
-  const none = list.filter((s) => s.state === 'none');
-  let body;
-  if (out.length) {
-    body = `<div class="pip-title">🔴 이탈 ${out.length}명</div>` + out.map((s) => `<div class="pip-out${flashIds.has(s.id) ? ' flash' : ''}">
-      <b>${esc(s.name)}</b><span>${s.state === 'left' ? '나감' : '다른 창'} · ${ago(t - s.since)}${s.away > 1 ? ` · ${s.away}번째` : ''}</span></div>`).join('');
-  } else body = `<div class="pip-ok">${c.active ? '✅ 모두 보고 있어요' : '아직 들어온 학생이 없어요'}</div>`;
-  const act = list.filter((s) => s.state === 'active');
-  if (act.length) body += `<div class="pip-sec g">🟢 보는 중 ${act.length}명</div><div class="pip-chips">${act.map((s) => `<span class="g">${esc(s.name)}</span>`).join('')}</div>`;
-  if (none.length) body += `<div class="pip-sec n">⚪ 아직 안 들어옴 ${none.length}명</div><div class="pip-chips">${none.map((s) => `<span class="n">${esc(s.name)}</span>`).join('')}</div>`;
-  box.innerHTML = `<div class="pip-counts"><span class="g">🟢 ${c.active}</span><span class="r">🔴 ${c.out}</span><span class="n">⚪ ${c.none}</span></div><div class="pip-body">${body}</div>`;
-  d.body.classList.toggle('alert', flashIds.size > 0);
-  d.title = (c.out ? `🔴${c.out} ` : '') + '학생 현황';
+  const seats = [...list].sort((a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric: true }));
+  const on = seats.filter((s) => s.state === 'active').length;
+  box.innerHTML = `<div class="pv-head"><span class="pv-c on"><i></i>${on}</span><span class="pv-c off"><i></i>${seats.length - on}</span><span class="pv-sp"></span><span class="pv-all">${seats.length}명</span></div>
+    <div class="pv-grid">${seats.map((s) => `<span class="pv-n ${s.state === 'active' ? 'on' : 'off'}${flashIds.has(s.id) ? ' flash' : ''}">${esc(s.name)}</span>`).join('')
+    || '<span class="pv-empty">등록된 학생이 없어요</span>'}</div>`;
+  d.title = `보는 중 ${on} / ${seats.length}`;
 }
 setInterval(renderRoster, 10000);
 $('#optSort').onchange = renderRoster;
@@ -659,11 +651,11 @@ function beep() {
 async function openPip(auto = false) {
   if (pipWin && !pipWin.closed) { if (!auto) pipWin.focus(); $('#pipHint').hidden = true; return false; }
   let w = null;
-  try { if (window.documentPictureInPicture) w = await documentPictureInPicture.requestWindow({ width: 300, height: 460 }); } catch (_) { w = null; }
+  try { if (window.documentPictureInPicture) w = await documentPictureInPicture.requestWindow({ width: 340, height: 210 }); } catch (_) { w = null; }
   if (!w && auto) return false;
   $('#pipHint').hidden = true;
   if (!w) {
-    w = window.open('', 'rosterPip', 'width=280,height=480');
+    w = window.open('', 'rosterPip', 'width=340,height=240');
     if (!w) { alert('팝업이 차단되었어요. 주소창 오른쪽에서 팝업을 허용해 주세요.'); return false; }
     w.document.open(); w.document.write('<!doctype html><meta charset="utf-8"><title>학생 현황</title><body></body>'); w.document.close();
   }
