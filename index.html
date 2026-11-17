@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>수업 입장</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="center-page">
+  <div class="card login">
+    <h1>📺 수업 입장</h1>
+    <div class="muted">선생님이 알려 준 <b>수업 코드</b>와 학번·이름을 입력하세요.</div>
+    <form id="f">
+      <input id="code" class="code-in" type="text" inputmode="numeric" maxlength="6" placeholder="수업 코드 6자리" autocomplete="off" required>
+      <input id="sid" type="text" inputmode="numeric" placeholder="학번 (예: 20301)" autocomplete="off" required>
+      <input id="name" type="text" placeholder="이름" autocomplete="off" required>
+      <button class="primary" type="submit" id="go">입장하기</button>
+      <div class="err" id="err"></div>
+    </form>
+    <div class="small muted" style="margin-top:10px;text-align:right"><a href="admin.html">선생님</a></div>
+  </div>
+</div>
+<script src="js/common.js"></script>
+<script type="module">
+import { auth, r, get, set, serverTimestamp, signInAnonymously, signOut, waitAuth, normName } from './js/fb.js';
+
+const qs = new URLSearchParams(location.search);
+try { const saved = JSON.parse(localStorage.getItem('studentMe') || '{}'); $('#sid').value = saved.id || ''; $('#name').value = saved.name || ''; } catch (_) { /* */ }
+if (qs.get('code')) $('#code').value = qs.get('code').replace(/\D/g, '').slice(0, 6);
+(qs.get('code') ? ($('#sid').value ? $('#name') : $('#sid')) : $('#code')).focus();
+$('#code').addEventListener('input', () => { $('#code').value = $('#code').value.replace(/\D/g, '').slice(0, 6); });
+
+// 이미 들어가 있는 수업이 있으면 바로 이동
+(async () => {
+  const lid = localStorage.getItem('studentLesson');
+  const user = await waitAuth();
+  if (lid && user && user.isAnonymous && !qs.get('code')) {
+    try { if ((await get(r(`lessons/${lid}/status`))).val() === 'open') location.replace('student.html'); } catch (_) { /* */ }
+  }
+})();
+
+$('#f').onsubmit = async (e) => {
+  e.preventDefault(); $('#err').textContent = ''; $('#go').disabled = true;
+  const code = $('#code').value.trim(), sid = $('#sid').value.trim(), name = $('#name').value.trim();
+  try {
+    let user = await waitAuth();
+    if (user && !user.isAnonymous) {
+      throw new Error('이 브라우저는 선생님 계정으로 로그인되어 있어요. 학생 화면을 시험하려면 시크릿 창(Ctrl+Shift+N)이나 다른 기기에서 열어 주세요.');
+    }
+    if (!user) user = (await signInAnonymously(auth)).user;
+    const lid = (await get(r('codes/' + code))).val();
+    if (!lid) throw new Error('수업 코드가 맞지 않거나 이미 끝난 수업이에요.');
+    let mine = null;
+    try { mine = (await get(r(`members/${lid}/${user.uid}`))).val(); } catch (_) { /* */ }
+    if (mine && mine.sid !== sid) {        // 같은 기기에서 다른 학생이 들어오는 경우: 새 익명 계정으로
+      await signOut(auth); user = (await signInAnonymously(auth)).user; mine = null;
+    }
+    if (!mine) {
+      try {
+        await set(r(`members/${lid}/${user.uid}`), { sid, n: normName(name), name, at: serverTimestamp() });
+      } catch (_) { throw new Error('이 수업 명단에 없는 학번·이름이에요. 선생님께 확인해 주세요.'); }
+    }
+    localStorage.setItem('studentLesson', lid);
+    localStorage.setItem('studentMe', JSON.stringify({ id: sid, name }));
+    location.href = 'student.html';
+  } catch (er) {
+    $('#err').textContent = er.code === 'auth/admin-restricted-operation' || er.code === 'auth/operation-not-allowed'
+      ? '지금은 입장할 수 없어요. 선생님께 알려 주세요. (Firebase 익명 로그인이 꺼져 있음)'
+      : er.code === 'auth/network-request-failed' ? '인터넷 연결을 확인해 주세요.' : er.message;
+    $('#go').disabled = false;
+  }
+};
+</script>
+</body>
+</html>
