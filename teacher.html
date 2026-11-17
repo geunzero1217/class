@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>수업 진행</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <a href="admin.html" title="관리 화면">←</a>
+    <span class="title" id="className">수업</span>
+    <span class="code-pill" id="codePill" title="누르면 크게 보기 (학생에게 보여 주세요)">------</span>
+    <span class="pill" id="conn">연결 중…</span>
+    <span class="row" id="modes">
+      <button data-mode="wait">⏸ 대기</button>
+      <button data-mode="slides">📄 슬라이드</button>
+      <button data-mode="web">🌐 웹페이지</button>
+      <button data-mode="screen">🖥 화면 공유</button>
+      <button data-mode="board">✏️ 칠판</button>
+    </span>
+    <span class="spacer"></span>
+    <button id="pipBtn" title="PowerPoint 등 다른 프로그램 위에도 떠 있는 작은 학생 목록 창">📌 학생 목록 띄우기</button>
+    <button id="endBtn" title="수업을 끝내고 출석을 마감해요">⏹ 수업 종료</button>
+  </div>
+  <div class="code-big" id="codeBig" hidden>
+    <div>
+      <div style="font-size:24px;opacity:.8">① 접속 주소</div>
+      <div class="u" id="cbUrl"></div>
+      <div style="font-size:24px;opacity:.8;margin-top:26px">② 수업 코드</div>
+      <div class="c" id="cbCode"></div>
+      <div class="qr" id="cbQr"></div>
+      <div style="opacity:.6;margin-top:14px">아무 곳이나 누르면 닫혀요</div>
+    </div>
+  </div>
+  <div class="code-big" id="endedView" hidden>
+    <div><div style="font-size:40px;font-weight:800" id="endedMsg">수업이 끝났어요</div>
+      <div style="margin-top:18px"><a href="admin.html"><button class="primary">관리 화면으로 (출석 확인)</button></a></div></div>
+  </div>
+
+  <div class="layout">
+    <main id="main">
+      <div class="subbar">
+        <div class="grp" data-for="wait"><span class="muted">학생 화면에 "수업 화면을 준비 중입니다"가 보여요.</span></div>
+        <div class="grp" data-for="slides">
+          <select id="deckSel" style="max-width:260px"></select>
+          <button id="uploadBtn">⬆ 자료 올리기</button>
+          <input id="fileIn" type="file" accept=".pdf,image/*,.ppt,.pptx" multiple hidden>
+          <span id="uploadMsg" class="small"></span>
+          <span class="sep"></span>
+          <button id="prevBtn" title="이전 (←)">◀</button>
+          <span id="pageInfo" style="min-width:64px;text-align:center">-</span>
+          <button id="nextBtn" title="다음 (→, 스페이스)">▶</button>
+        </div>
+        <div class="grp" data-for="web" style="flex:1">
+          <form id="urlForm" class="row" style="flex:1">
+            <input id="urlIn" type="text" placeholder="https://… 보여 줄 웹페이지 주소" style="flex:1;min-width:200px">
+            <button class="primary">열기</button>
+          </form>
+          <span class="small muted">화면 안에 안 열리는 사이트는 🖥 화면 공유(탭)를 쓰세요</span>
+        </div>
+        <div class="grp" data-for="screen">
+          <button id="shareBtn" class="primary">▶ 화면 공유 시작</button>
+          <button id="stopShareBtn" hidden>■ 공유 중지</button>
+          <span id="shareInfo" class="small"></span>
+        </div>
+        <div class="grp" data-for="board">
+          <button id="bPrev">◀</button>
+          <span id="boardInfo" style="min-width:64px;text-align:center">1 / 1</span>
+          <button id="bNext">▶</button>
+          <button id="bAdd">＋ 새 페이지</button>
+        </div>
+      </div>
+
+      <div id="stageWrap"></div>
+
+      <div class="toolbar" id="toolbar">
+        <button data-tool="select" title="선택 (Esc)">🖱 선택</button>
+        <button data-tool="laser" title="레이저 포인터 (L)">🔴 레이저</button>
+        <button data-tool="pen" title="펜 (P)">🖊 펜</button>
+        <button data-tool="hl" title="형광펜 (H)">🖍 형광펜</button>
+        <button data-tool="eraser" title="지우개 (E)">🧽 지우개</button>
+        <span class="sep"></span>
+        <span id="colors" class="row" style="gap:5px"></span>
+        <span class="sep"></span>
+        <span id="sizes" class="row" style="gap:5px"></span>
+        <span class="sep"></span>
+        <button id="undoBtn" title="되돌리기 (Ctrl+Z)">↶ 되돌리기</button>
+        <button id="clearBtn">🗑 모두 지우기</button>
+        <span class="sep"></span>
+        <button id="fsBtn" title="전체 화면">⛶ 전체 화면</button>
+      </div>
+
+      <div class="mini" id="mini" title="클릭하면 접기/펴기"></div>
+    </main>
+
+    <aside class="roster">
+      <div class="roster-head">
+        <div class="counts" id="counts"></div>
+        <div class="roster-opts">
+          <label><input type="checkbox" id="optSort" checked> 이탈 학생 위로</label>
+          <label><input type="checkbox" id="optSound" checked> 알림음</label>
+          <a href="#" id="resetCnt">화면 표시 초기화</a>
+        </div>
+      </div>
+      <div class="roster-list" id="rosterList"></div>
+    </aside>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="js/common.js"></script>
+<script type="module">
+import {
+  r, get, set, update, remove, push, onValue, onChildAdded, onChildChanged, onChildRemoved, serverTimestamp,
+  waitAuth, ensureTeacher, now, skey, closeLesson, uploadDeck, SlideCache, iceServers, LATE_MINUTES,
+} from './js/fb.js';
+
+const lid = new URLSearchParams(location.search).get('l');
+const user = await waitAuth();
+if (!lid || !user || user.isAnonymous || !(await ensureTeacher(user))) { location.replace('admin.html'); throw new Error('로그인 필요'); }
+const les = (await get(r('lessons/' + lid))).val();
+if (!les) { alert('수업을 찾을 수 없어요.'); location.replace('admin.html'); throw new Error('수업 없음'); }
+const cid = les.cid;
+$('#className').textContent = `${les.className} · ${fmtDate(les.date)} ${les.period}교시`;
+$('#codePill').textContent = les.code || '------';
+document.title = '수업 · ' + les.className;
+
+let ended = false;
+let stream = null;
+let key = null, inkUnsubs = [], cur = null, myStack = [];
+let lastPtr = 0, ptrTimer = null;
+function showEnded(msg) {
+  if (ended) return; ended = true;
+  if (stream) stopShare();
+  $('#endedMsg').textContent = msg || '수업이 끝났어요';
+  $('#endedView').hidden = false; document.title = '수업 끝';
+}
+if (les.status !== 'open') showEnded('이미 끝난 수업이에요');
+onValue(r(`lessons/${lid}/status`), (s) => { if (s.val() !== 'open') showEnded(); });
+onValue(r('.info/connected'), (s) => {
+  const ok = !!s.val(), c = $('#conn');
+  c.textContent = ok ? '서버 연결됨' : '연결 끊김 · 다시 연결 중'; c.className = 'pill ' + (ok ? 'ok' : 'bad');
+});
+
+/* ───────── 화면 상태 ───────── */
+const stage = new Stage($('#stageWrap'));
+let st = { mode: 'wait', deckId: null, page: 0, url: '', board: 0, boardCount: 1, aspect: 16 / 9, sharing: false, shareId: 0 };
+const saved = (await get(r('live/' + lid))).val();
+if (saved) st = { ...st, ...saved, sharing: false };
+let decks = {};
+const slides = new SlideCache(() => applyLocal());
+const curDeck = () => (st.deckId ? decks[st.deckId] : null);
+
+function sendState() { if (!ended) set(r('live/' + lid), st).catch((e) => toast('저장 실패: ' + e.message)); }
+function setState(patch) { Object.assign(st, patch); applyLocal(); sendState(); }
+function applyLocal() {
+  watchInk();
+  const d = curDeck();
+  let slide = null;
+  if (st.mode === 'slides' && d) {
+    slide = slides.url(st.deckId, st.page || 0);
+    for (let j = (st.page || 0) + 1; j < Math.min(d.pages.length, (st.page || 0) + 3); j++) slides.url(st.deckId, j);
+  }
+  renderView(stage, st, d, true, { slide });
+  $$('#modes button').forEach((b) => b.classList.toggle('on', b.dataset.mode === st.mode));
+  $$('.subbar .grp').forEach((g) => (g.hidden = g.dataset.for !== st.mode));
+  $('#deckSel').value = st.deckId || '';
+  $('#pageInfo').textContent = d ? `${(st.page || 0) + 1} / ${d.pages.length}` : '-';
+  $('#boardInfo').textContent = `${(st.board || 0) + 1} / ${st.boardCount || 1}`;
+  if (st.mode === 'web' && document.activeElement !== $('#urlIn')) $('#urlIn').value = st.url || '';
+  $('#shareBtn').hidden = !!stream; $('#stopShareBtn').hidden = !stream;
+}
+
+$$('#modes button').forEach((b) => (b.onclick = () => {
+  const mode = b.dataset.mode;
+  const patch = { mode };
+  const ids = Object.keys(decks);
+  if (mode === 'slides' && (!st.deckId || !decks[st.deckId]) && ids.length) { patch.deckId = ids[ids.length - 1]; patch.page = 0; }
+  if (mode === 'screen') patch.sharing = !!stream;
+  setState(patch);
+  if (mode === 'screen' && !stream) startShare();
+  if (mode === 'web' && !st.url) setTimeout(() => $('#urlIn').focus(), 0);
+}));
+
+/* 슬라이드 */
+onValue(r('decks/' + cid), (s) => {
+  decks = s.val() || {};
+  $('#deckSel').innerHTML = '<option value="">— 자료 선택 —</option>' +
+    Object.entries(decks).map(([id, d]) => `<option value="${id}">${esc(d.name)} (${d.pages.length}장)</option>`).join('');
+  if (st.deckId && !decks[st.deckId] && st.mode === 'slides') setState({ deckId: null, page: 0 }); else applyLocal();
+});
+$('#deckSel').onchange = () => setState({ mode: 'slides', deckId: $('#deckSel').value || null, page: 0 });
+function go(delta) {
+  if (st.mode === 'slides') {
+    const d = curDeck(); if (!d) return;
+    const p = Math.max(0, Math.min(d.pages.length - 1, (st.page || 0) + delta));
+    if (p !== st.page) setState({ page: p });
+  } else if (st.mode === 'board') {
+    const b = Math.max(0, Math.min((st.boardCount || 1) - 1, (st.board || 0) + delta));
+    if (b !== st.board) setState({ board: b });
+  }
+}
+$('#prevBtn').onclick = () => go(-1); $('#nextBtn').onclick = () => go(1);
+$('#bPrev').onclick = () => go(-1); $('#bNext').onclick = () => go(1);
+$('#bAdd').onclick = () => { const n = (st.boardCount || 1) + 1; setState({ boardCount: n, board: n - 1 }); };
+$('#uploadBtn').onclick = () => $('#fileIn').click();
+$('#fileIn').onchange = async () => {
+  const files = [...$('#fileIn').files]; $('#fileIn').value = ''; if (!files.length) return;
+  $('#uploadBtn').disabled = true;
+  try {
+    const deck = await uploadDeck(cid, files, (m) => ($('#uploadMsg').textContent = '⏳ ' + m));
+    setState({ mode: 'slides', deckId: deck.id, page: 0 });
+    $('#uploadMsg').textContent = `✅ ${deck.pages.length}장`;
+    setTimeout(() => ($('#uploadMsg').textContent = ''), 4000);
+  } catch (er) { $('#uploadMsg').textContent = '❌ ' + er.message; }
+  finally { $('#uploadBtn').disabled = false; }
+};
+
+/* 웹페이지 */
+$('#urlForm').onsubmit = (e) => {
+  e.preventDefault();
+  let u = $('#urlIn').value.trim(); if (!u) return;
+  if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
+  $('#urlIn').value = u; $('#urlIn').blur();
+  setState({ mode: 'web', url: u });
+};
+
+/* ───────── 필기 ───────── */
+function watchInk() {
+  const k = stateKey(st);
+  if (k === key) return;
+  key = k; inkUnsubs.forEach((u) => u()); inkUnsubs = []; stage.ink.clear(); sendPointer(null);
+  if (!k) return;
+  const ref = r(`ink/${lid}/${k}`);
+  const up = (s) => { if (!cur || s.key !== cur.id) stage.ink.upsert(s.key, strokeFromDb(s.val())); };
+  inkUnsubs.push(onChildAdded(ref, up), onChildChanged(ref, up), onChildRemoved(ref, (s) => stage.ink.remove(s.key)));
+}
+const COLORS = ['#e11d48', '#2563eb', '#16a34a', '#f59e0b', '#111827', '#ffffff'];
+const SIZES = [2, 4, 8, 14];
+let tool = 'select', color = COLORS[0], size = SIZES[1];
+$('#colors').innerHTML = COLORS.map((c) => `<button class="swatch" data-color="${c}" style="background:${c}" title="${c}"></button>`).join('');
+$('#sizes').innerHTML = SIZES.map((s) => `<button class="size-btn" data-size="${s}" title="굵기 ${s}"><span style="width:${s + 3}px;height:${s + 3}px"></span></button>`).join('');
+function setTool(t) {
+  tool = t;
+  $$('#toolbar [data-tool]').forEach((b) => b.classList.toggle('on', b.dataset.tool === t));
+  const w = $('#stageWrap');
+  w.classList.toggle('drawing', t !== 'select');
+  ['laser', 'pen', 'hl', 'eraser'].forEach((x) => w.classList.toggle('t-' + x, x === t));
+  if (t !== 'laser') sendPointer(null);
+}
+function setColor(c) { color = c; $$('#colors .swatch').forEach((b) => b.classList.toggle('on', b.dataset.color === c)); if (tool !== 'pen' && tool !== 'hl') setTool('pen'); }
+function setSize(s) { size = s; $$('#sizes button').forEach((b) => b.classList.toggle('on', +b.dataset.size === s)); }
+$$('#toolbar [data-tool]').forEach((b) => (b.onclick = () => setTool(b.dataset.tool)));
+$$('#colors .swatch').forEach((b) => (b.onclick = () => setColor(b.dataset.color)));
+$$('#sizes button').forEach((b) => (b.onclick = () => setSize(+b.dataset.size)));
+setColor(COLORS[0]); setTool('select'); setSize(SIZES[1]);
+
+const live = stage.ink.live;
+const clamp = (v) => Math.max(0, Math.min(1, v));
+function pos(e) { const b = live.getBoundingClientRect(); return [clamp((e.clientX - b.left) / b.width), clamp((e.clientY - b.top) / b.height)]; }
+let flushTimer = null;
+function flush(final) {
+  clearTimeout(flushTimer); flushTimer = null;
+  if (!cur) return;
+  set(r(`ink/${lid}/${cur.key}/${cur.id}`), { t: cur.s.t, c: cur.s.c, s: cur.s.s, p: encPts(cur.s.pts), done: !!final }).catch(() => {});
+}
+function erasePoint(p) {
+  const ids = stage.ink.hit(p[0], p[1], 8);
+  if (!ids.length) return;
+  const u = {}; ids.forEach((id) => { stage.ink.remove(id); u[`ink/${lid}/${key}/${id}`] = null; });
+  update(r(''), u).catch(() => {});
+}
+function sendPointer(p) {
+  const t = performance.now();
+  clearTimeout(ptrTimer);
+  if (p && t - lastPtr < 50) { ptrTimer = setTimeout(() => sendPointer(p), 50); return; }
+  lastPtr = t;
+  stage.showLaser(p ? { x: p[0], y: p[1] } : null);
+  if (ended) return;
+  if (p) set(r('pointer/' + lid), { k: key, x: Math.round(p[0] * 10000) / 10000, y: Math.round(p[1] * 10000) / 10000 }).catch(() => {});
+  else remove(r('pointer/' + lid)).catch(() => {});
+}
+live.addEventListener('pointerdown', (e) => {
+  if (tool === 'select') return;
+  if (!key) { toast('대기 화면에는 필기할 수 없어요.'); return; }
+  e.preventDefault(); live.setPointerCapture(e.pointerId);
+  const p = pos(e);
+  if (tool === 'pen' || tool === 'hl') {
+    const id = push(r(`ink/${lid}/${key}`)).key;
+    cur = { id, key, s: { t: tool, c: color, s: size, pts: [p], done: false } };
+    stage.ink.upsert(id, cur.s); flush(false);
+    myStack.push({ key, id });
+  } else if (tool === 'eraser') erasePoint(p);
+  else if (tool === 'laser') sendPointer(p);
+});
+live.addEventListener('pointermove', (e) => {
+  if (tool === 'laser') { sendPointer(pos(e)); return; }
+  if (tool === 'eraser' && e.buttons) { erasePoint(pos(e)); return; }
+  if (!cur) return;
+  const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+  cur.s.pts.push(...(evs.length ? evs : [e]).map(pos));
+  stage.ink.upsert(cur.id, cur.s);
+  if (!flushTimer) flushTimer = setTimeout(() => flush(false), 60);
+});
+function endStroke() {
+  if (!cur) return;
+  cur.s.done = true; stage.ink.upsert(cur.id, cur.s); flush(true); cur = null;
+}
+live.addEventListener('pointerup', endStroke);
+live.addEventListener('pointercancel', endStroke);
+live.addEventListener('pointerleave', () => { if (tool === 'laser') sendPointer(null); });
+function undo() {
+  for (let i = myStack.length - 1; i >= 0; i--) {
+    const it = myStack[i];
+    if (it.key === key && stage.ink.strokes.has(it.id)) {
+      myStack.splice(i, 1); stage.ink.remove(it.id); remove(r(`ink/${lid}/${key}/${it.id}`)).catch(() => {}); return;
+    }
+  }
+  toast('되돌릴 필기가 없어요.');
+}
+$('#undoBtn').onclick = undo;
+$('#clearBtn').onclick = () => {
+  if (!key || !stage.ink.strokes.size) return;
+  if (!confirm('이 쪽의 필기를 모두 지울까요?')) return;
+  stage.ink.clear(); remove(r(`ink/${lid}/${key}`)).catch(() => {});
+};
+
+/* 전체 화면 / 단축키 */
+$('#fsBtn').onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else $('#main').requestFullscreen().catch(() => {}); };
+document.addEventListener('fullscreenchange', () => { $('#fsBtn').textContent = document.fullscreenElement ? '⛶ 전체 화면 끝' : '⛶ 전체 화면'; });
+$('#mini').onclick = () => $('#mini').classList.toggle('collapsed');
+document.addEventListener('keydown', (e) => {
+  const tag = (e.target.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); return; }
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const k = e.key;
+  if (k === 'ArrowRight' || k === 'PageDown' || k === ' ') { e.preventDefault(); go(1); }
+  else if (k === 'ArrowLeft' || k === 'PageUp') { e.preventDefault(); go(-1); }
+  else if (k === 'Escape') setTool('select');
+  else if (k === 'l' || k === 'L') setTool('laser');
+  else if (k === 'p' || k === 'P') setTool('pen');
+  else if (k === 'h' || k === 'H') setTool('hl');
+  else if (k === 'e' || k === 'E') setTool('eraser');
+});
+
+/* ───────── 화면 공유 (WebRTC, 신호는 Firebase로) ───────── */
+const peers = new Map();   // 학생 uid → { pc, shareId, answered, seen }
+async function startShare() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) { alert('이 브라우저는 화면 공유를 지원하지 않아요. PC의 Chrome이나 Edge를 써 주세요.'); return; }
+  try { stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 15, max: 30 } }, audio: false }); }
+  catch (_) { toast('화면 공유를 취소했어요.'); applyLocal(); return; }
+  const track = stream.getVideoTracks()[0];
+  try { track.contentHint = 'detail'; } catch (_) { /* */ }
+  track.onended = stopShare;
+  stage.video.srcObject = stream;
+  await new Promise((res) => { if (stage.video.videoWidth) res(); else stage.video.onloadedmetadata = () => res(); setTimeout(res, 1500); });
+  await remove(r('rtc/' + lid)).catch(() => {});
+  setState({ mode: 'screen', sharing: true, shareId: Date.now(), aspect: videoAspect() });
+  updateShareInfo(); if (relayWant > 0) startRelay();
+}
+function videoAspect() { const v = stage.video; return v.videoWidth && v.videoHeight ? v.videoWidth / v.videoHeight : 16 / 9; }
+stage.video.addEventListener('resize', () => { if (stream && st.mode === 'screen') { const a = videoAspect(); if (Math.abs(a - (st.aspect || 0)) > 0.01) setState({ aspect: a }); } });
+function stopShare() {
+  if (stream) stream.getTracks().forEach((t) => t.stop());
+  stream = null; stage.video.srcObject = null;
+  peers.forEach((p) => p.pc.close()); peers.clear();
+  stopRelay(); $('#shareInfo').textContent = '';
+  if (!ended) { remove(r('rtc/' + lid)).catch(() => {}); remove(r(`relay/${lid}/frame`)).catch(() => {}); }
+  if (st.mode === 'screen' && !ended) setState({ sharing: false }); else applyLocal();
+}
+$('#shareBtn').onclick = () => { if (st.mode !== 'screen') setState({ mode: 'screen', sharing: false }); startShare(); };
+$('#stopShareBtn').onclick = stopShare;
+
+async function onRtc(s) {
+  const uid = s.key, v = s.val() || {};
+  if (!stream || v.req !== st.shareId) return;
+  let p = peers.get(uid);
+  if (!p || p.shareId !== v.req) {
+    if (p) p.pc.close();
+    const pc = new RTCPeerConnection({ iceServers });
+    p = { pc, shareId: v.req, answered: false, seen: new Set() };
+    peers.set(uid, p);
+    stream.getTracks().forEach((t) => pc.addTrack(t, stream));
+    pc.getSenders().forEach((snd) => {
+      try { const prm = snd.getParameters(); prm.degradationPreference = 'maintain-resolution'; if (!prm.encodings || !prm.encodings.length) prm.encodings = [{}]; prm.encodings[0].maxBitrate = 2_500_000; snd.setParameters(prm).catch(() => {}); } catch (_) { /* */ }
+    });
+    pc.onicecandidate = (e) => { if (e.candidate) set(r(`rtc/${lid}/${uid}/tc/${Date.now()}${Math.random().toString(36).slice(2, 6)}`), e.candidate.toJSON()).catch(() => {}); };
+    pc.onconnectionstatechange = () => updateShareInfo();
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    await set(r(`rtc/${lid}/${uid}/offer`), { type: offer.type, sdp: offer.sdp, shareId: p.shareId });
+  }
+  if (v.answer && v.answer.shareId === p.shareId && !p.answered) {
+    p.answered = true;
+    try { await p.pc.setRemoteDescription({ type: v.answer.type, sdp: v.answer.sdp }); } catch (_) { /* */ }
+  }
+  if (p.answered && v.sc) for (const [k, c] of Object.entries(v.sc)) if (!p.seen.has(k)) { p.seen.add(k); p.pc.addIceCandidate(c).catch(() => {}); }
+}
+onChildAdded(r('rtc/' + lid), onRtc);
+onChildChanged(r('rtc/' + lid), onRtc);
+onChildRemoved(r('rtc/' + lid), (s) => { const p = peers.get(s.key); if (p) { p.pc.close(); peers.delete(s.key); } updateShareInfo(); });
+
+// 우회 전송: WebRTC가 막힌 학생이 있을 때만, 1.2초마다 화면 사진을 Firebase로
+let relayWant = 0;
+onValue(r(`relay/${lid}/want`), (s) => { relayWant = s.size || 0; if (relayWant > 0 && stream) startRelay(); else stopRelay(); updateShareInfo(); });
+function updateShareInfo() {
+  if (!stream) return;
+  const n = [...peers.values()].filter((p) => p.pc.connectionState === 'connected').length;
+  $('#shareInfo').textContent = `🔴 공유 중 · 영상 연결 ${n}명` + (relayWant ? ` · 우회 전송 ${relayWant}명` : '');
+}
+const ticker = new Worker(URL.createObjectURL(new Blob(['let h;onmessage=e=>{clearInterval(h);if(e.data>0)h=setInterval(()=>postMessage(0),e.data)}'], { type: 'text/javascript' })));
+let relayOn = false, capBusy = false, imageCapture = null;
+const capCanvas = document.createElement('canvas');
+function startRelay() {
+  if (relayOn) return; relayOn = true;
+  try { imageCapture = window.ImageCapture ? new ImageCapture(stream.getVideoTracks()[0]) : null; } catch (_) { imageCapture = null; }
+  ticker.postMessage(1200);
+}
+function stopRelay() { relayOn = false; ticker.postMessage(0); imageCapture = null; }
+ticker.onmessage = async () => {
+  if (!relayOn || capBusy || !stream) return;
+  capBusy = true;
+  try {
+    let src = null, w, h;
+    if (imageCapture) { try { src = await imageCapture.grabFrame(); w = src.width; h = src.height; } catch (_) { src = null; } }
+    if (!src) { src = stage.video; w = src.videoWidth; h = src.videoHeight; }
+    if (!w || !h) return;
+    const sc = Math.min(1, 960 / w);
+    capCanvas.width = Math.round(w * sc); capCanvas.height = Math.round(h * sc);
+    capCanvas.getContext('2d').drawImage(src, 0, 0, capCanvas.width, capCanvas.height);
+    if (src.close) src.close();
+    await set(r(`relay/${lid}/frame`), { d: capCanvas.toDataURL('image/jpeg', 0.5), t: serverTimestamp() });
+  } catch (_) { /* */ } finally { capBusy = false; }
+};
+
+/* ───────── 학생 접속 현황 + 출석 기록 ─────────
+   presence(학생이 쓰는 시청 상태) + members(입장 기록)를 보고, 시청 시간·이탈 횟수를 att 에 기록 */
+const LABEL = { active: '시청 중', away: '다른 창/탭으로 이탈', left: '페이지 나감', none: '미접속' };
+const ORDER = { away: 0, left: 1, active: 2, none: 3 };
+let roster = {}, members = {}, presence = {}, attDb = {};
+const loaded = { roster: false, members: false, presence: false, att: false };
+const meta = {};   // sid → { state, since, base(확정된 시청 ms), away, shown(화면용 이탈 횟수) }
+let flashIds = new Set(), pipWin = null;
+const lateMs = (les.lateMin ?? LATE_MINUTES) * 60000;
+onValue(r('rosters/' + cid), (s) => { roster = s.val() || {}; loaded.roster = true; recompute(); });
+onValue(r('members/' + lid), (s) => { members = s.val() || {}; loaded.members = true; recompute(); });
+onValue(r('presence/' + lid), (s) => { presence = s.val() || {}; loaded.presence = true; recompute(); });
+onValue(r('att/' + lid), (s) => { attDb = s.val() || {}; loaded.att = true; recompute(); });
+
+function recompute() {
+  if (!Object.values(loaded).every(Boolean)) return;
+  const bySid = {}, first = {};
+  for (const [uid, m] of Object.entries(members)) {
+    if (!m) continue; (bySid[m.sid] ||= []).push(uid);
+    if (!first[m.sid] || m.at < first[m.sid]) first[m.sid] = m.at;
+  }
+  const t = now(), newlyAway = [];
+  for (const s of Object.values(roster)) {
+    const uids = bySid[s.sid] || [];
+    let state = 'none';
+    if (uids.length) {
+      const ps = uids.map((u) => presence[u]).filter(Boolean);
+      state = ps.some((p) => p.s === 'active') ? 'active' : ps.length ? 'away' : 'left';
+    }
+    const a = attDb[skey(s.sid)] || {};
+    let m = meta[s.sid];
+    if (!m) { meta[s.sid] = m = { state, since: t, base: a.activeMs || 0, away: a.away || 0, shown: a.away || 0 }; continue; }
+    if (m.state === state) continue;
+    if (m.state === 'active') m.base += t - m.since;
+    if (m.state === 'active' && (state === 'away' || state === 'left')) { m.away++; m.shown++; newlyAway.push(s.sid); }
+    m.state = state; m.since = t;
+    if (!ended) update(r(`att/${lid}/${skey(s.sid)}`), { activeMs: Math.round(m.base), away: m.away }).catch(() => {});
+  }
+  window._first = first;
+  if (newlyAway.length) { newlyAway.forEach((id) => flashIds.add(id)); beep(); setTimeout(() => { newlyAway.forEach((id) => flashIds.delete(id)); renderRoster(); }, 3200); }
+  renderRoster();
+}
+// 시청 중인 시간은 30초마다 저장 (선생님 화면이 갑자기 닫혀도 대부분 남도록)
+function flushAtt() {
+  if (ended) return Promise.resolve();
+  const t = now(), u = {};
+  for (const [sid, m] of Object.entries(meta)) if (m.state === 'active') u[`att/${lid}/${skey(sid)}/activeMs`] = Math.round(m.base + t - m.since);
+  return Object.keys(u).length ? update(r(''), u).catch(() => {}) : Promise.resolve();
+}
+setInterval(flushAtt, 30000);
+window.addEventListener('pagehide', flushAtt);
+
+function rosterList() {
+  const first = window._first || {};
+  const list = Object.values(roster).map((s) => {
+    const m = meta[s.sid] || { state: 'none' };
+    const a = attDb[skey(s.sid)] || {};
+    const att = a.manual || (first[s.sid] ? (first[s.sid] - les.openedAt > lateMs ? 'late' : 'present') : 'absent');
+    return { id: s.sid, name: s.name, state: m.state, since: m.since, away: m.shown || 0, att };
+  });
+  list.sort((a, b) => ($('#optSort').checked ? ORDER[a.state] - ORDER[b.state] : 0) || String(a.id).localeCompare(String(b.id)));
+  return list;
+}
+function countsHtml(list) {
+  const c = { active: 0, out: 0, none: 0 };
+  list.forEach((s) => (s.state === 'active' ? c.active++ : s.state === 'none' ? c.none++ : c.out++));
+  return { c, html: `<span style="color:var(--green)">🟢 ${c.active}</span><span style="color:var(--red)">🔴 ${c.out}</span><span class="muted">⚪ ${c.none}</span>` };
+}
+function rosterItems(list) {
+  const t = now();
+  return list.map((s) => `<div class="stu ${s.state}${flashIds.has(s.id) ? ' flash' : ''}">
+    <span class="dot"></span>
+    <span class="nm"><b>${esc(s.name)}</b> <span class="muted small">${esc(s.id)}</span>${s.att === 'late' ? ' <span class="st st-late">지각</span>' : ''}${s.away ? `<span class="badge" title="이탈 횟수">${s.away}</span>` : ''}</span>
+    <span class="meta">${LABEL[s.state]}${s.since && s.state !== 'none' ? `<br>${ago(t - s.since)} 전` : ''}</span>
+  </div>`).join('') || '<div class="muted small" style="padding:10px">등록된 학생이 없어요.<br>관리 화면에서 학생을 등록하세요.</div>';
+}
+function renderRoster() {
+  const list = rosterList(); const { c, html } = countsHtml(list);
+  $('#counts').innerHTML = html;
+  $('#rosterList').innerHTML = rosterItems(list);
+  document.title = (c.out ? `🔴${c.out} ` : '') + (ended ? '수업 끝' : '수업 · ' + les.className);
+  const out = list.filter((s) => s.state === 'away' || s.state === 'left');
+  $('#mini').innerHTML = `<div class="mc">${html}</div><ul>${(out.length ? out : list.filter((s) => s.state !== 'none')).slice(0, 40)
+    .map((s) => `<li class="${s.state}"><i></i>${esc(s.name)}</li>`).join('')}</ul>`;
+  if (pipWin && !pipWin.closed) {
+    const d = pipWin.document, h = d.getElementById('pc'), l = d.getElementById('pl');
+    if (h) h.innerHTML = html;
+    if (l) l.innerHTML = rosterItems(list);
+  }
+}
+setInterval(renderRoster, 10000);
+$('#optSort').onchange = renderRoster;
+$('#resetCnt').onclick = (e) => { e.preventDefault(); Object.values(meta).forEach((m) => (m.shown = 0)); renderRoster(); toast('화면의 이탈 표시만 0으로 했어요 (출석 기록은 그대로).'); };
+
+let audioCtx = null;
+document.addEventListener('pointerdown', () => { if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (_) { /* */ } } }, { once: true });
+function beep() {
+  if (!$('#optSound').checked || !audioCtx) return;
+  const t = audioCtx.currentTime;
+  [0, 0.18].forEach((dt) => {
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.frequency.value = 880; o.connect(g); g.connect(audioCtx.destination);
+    g.gain.setValueAtTime(0.0001, t + dt); g.gain.exponentialRampToValueAtTime(0.25, t + dt + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + dt + 0.14);
+    o.start(t + dt); o.stop(t + dt + 0.15);
+  });
+}
+
+/* 📌 다른 프로그램 위에 떠 있는 학생 목록 창 */
+$('#pipBtn').onclick = async () => {
+  if (pipWin && !pipWin.closed) { pipWin.focus(); return; }
+  let w = null;
+  try { if (window.documentPictureInPicture) w = await documentPictureInPicture.requestWindow({ width: 270, height: 460 }); } catch (_) { w = null; }
+  if (!w) {
+    w = window.open('', 'rosterPip', 'width=280,height=480');
+    if (!w) { alert('팝업이 차단되었어요. 주소창 오른쪽에서 팝업을 허용해 주세요.'); return; }
+    w.document.open(); w.document.write('<!doctype html><meta charset="utf-8"><title>학생 현황</title><body></body>'); w.document.close();
+  }
+  const link = w.document.createElement('link'); link.rel = 'stylesheet'; link.href = new URL('css/style.css', location.href).href;
+  w.document.head.appendChild(link);
+  w.document.body.style.margin = '0';
+  w.document.body.innerHTML = '<div class="roster" style="width:100%;height:100vh;border:0"><div class="roster-head"><div class="counts" id="pc"></div></div><div class="roster-list" id="pl"></div></div>';
+  pipWin = w; renderRoster();
+};
+
+/* 수업 코드 크게 보기 / 종료 */
+$('#codePill').onclick = () => {
+  $('#cbUrl').textContent = SITE_BASE.replace(/^https?:\/\//, '');
+  $('#cbCode').textContent = les.code;
+  $('#cbQr').innerHTML = '';
+  const draw = () => new QRCode($('#cbQr'), { text: `${SITE_BASE}/?code=${les.code}`, width: 220, height: 220 });
+  if (window.QRCode) draw();
+  else { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'; s.onload = draw; s.onerror = () => ($('#cbQr').hidden = true); document.head.appendChild(s); }
+  $('#codeBig').hidden = false;
+};
+$('#codeBig').onclick = () => ($('#codeBig').hidden = true);
+$('#endBtn').onclick = async () => {
+  if (!confirm('수업을 끝낼까요?\n출석이 마감되고 학생들은 모두 나가져요.')) return;
+  try {
+    // 지금 시청 중인 시간까지 확정해서 저장한 뒤 종료
+    const t = now(), u = {};
+    for (const [sid, m] of Object.entries(meta)) if (m.state === 'active') { m.base += t - m.since; m.since = t; u[`att/${lid}/${skey(sid)}/activeMs`] = Math.round(m.base); }
+    if (Object.keys(u).length) await update(r(''), u);
+    if (stream) stopShare();
+    await closeLesson(lid); showEnded();
+  } catch (er) { alert(er.message); }
+};
+
+applyLocal(); sendState();
+</script>
+</body>
+</html>
