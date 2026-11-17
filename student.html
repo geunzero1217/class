@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>수업 화면</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app">
+  <div class="student-top">
+    <span class="pill" id="conn">연결 중…</span>
+    <b id="className"></b>
+    <span id="me" class="muted"></span>
+    <span class="spacer"></span>
+    <button id="fsBtn">⛶ 전체 화면</button>
+    <button id="logoutBtn">나가기</button>
+  </div>
+  <div class="notice">👀 이 화면을 벗어나면(다른 탭·창으로 이동) 선생님께 표시됩니다.</div>
+  <div class="student-stage"><div id="stageWrap" style="flex:1;display:grid"></div></div>
+</div>
+<script src="js/common.js"></script>
+<script type="module">
+import {
+  auth, r, get, set, remove, onValue, onChildAdded, onChildChanged, onChildRemoved, onDisconnect, serverTimestamp,
+  signOut, waitAuth, iceServers, SlideCache, off,
+} from './js/fb.js';
+
+const lid = localStorage.getItem('studentLesson');
+const user = await waitAuth();
+const toJoin = (msg) => { if (msg) alert(msg); localStorage.removeItem('studentLesson'); location.replace('index.html'); throw new Error('입장 화면으로 이동'); };
+if (!lid || !user || !user.isAnonymous) toJoin();
+const uid = user.uid;
+const me = (await get(r(`members/${lid}/${uid}`))).val();
+if (!me) toJoin();
+let les = null;
+try { les = (await get(r('lessons/' + lid))).val(); } catch (_) { /* */ }
+if (!les || les.status !== 'open') toJoin('끝난 수업이에요. 새 수업 코드로 다시 들어오세요.');
+$('#className').textContent = `${les.className || ''} · ${les.period}교시`;
+$('#me').textContent = `${me.sid} ${me.name || ''}`;
+document.title = (les.className || '수업') + ' · 수업 화면';
+
+onValue(r(`lessons/${lid}/status`), (s) => { if (s.val() !== 'open') { cleanup(); toJoin('수업이 끝났어요.'); } });
+
+/* 연결 상태 + 시청 상태 (보이고 + 포커스 있을 때만 '시청 중') */
+const presRef = r(`presence/${lid}/${uid}`);
+const curStatus = () => (document.visibilityState === 'visible' && document.hasFocus() ? 'active' : 'away');
+let lastStatus = null, connected = false;
+function report(force) {
+  const s = curStatus();
+  if (!connected || (s === lastStatus && !force)) return;
+  lastStatus = s; set(presRef, { s, t: serverTimestamp() }).catch(() => {});
+}
+onValue(r('.info/connected'), async (snap) => {
+  connected = !!snap.val();
+  const c = $('#conn'); c.textContent = connected ? '연결됨' : '연결 끊김 · 다시 연결 중'; c.className = 'pill ' + (connected ? 'ok' : 'bad');
+  if (connected) { await onDisconnect(presRef).remove(); report(true); }
+});
+const soon = () => setTimeout(() => report(), 250);   // iframe 클릭 같은 잠깐의 blur 는 무시
+['focus', 'blur', 'pageshow'].forEach((ev) => window.addEventListener(ev, soon));
+document.addEventListener('visibilitychange', soon);
+setInterval(() => report(), 1000);
+
+function cleanup() { remove(presRef).catch(() => {}); remove(r(`rtc/${lid}/${uid}`)).catch(() => {}); remove(r(`relay/${lid}/want/${uid}`)).catch(() => {}); }
+$('#logoutBtn').onclick = async () => {
+  if (!confirm('수업에서 나갈까요?')) return;
+  cleanup(); await signOut(auth); toJoin();
+};
+$('#fsBtn').onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {}); };
+
+/* 화면 상태 */
+const stage = new Stage($('#stageWrap'));
+let st = { mode: 'wait' }, deck = null, deckId = null, key = null, videoReady = false, relay = false;
+const slides = new SlideCache(() => render());
+function render() {
+  let slide = null;
+  if (st.mode === 'slides' && st.deckId && deck) {
+    slide = slides.url(st.deckId, st.page || 0);
+    for (let j = (st.page || 0) + 1; j < Math.min(deck.pages.length, (st.page || 0) + 3); j++) slides.url(st.deckId, j);
+  }
+  renderView(stage, st, deck, false, { videoReady, relay, slide });
+}
+let deckUnsub = null;
+function watchDeck() {
+  if (st.deckId === deckId) return;
+  deckId = st.deckId; deck = null;
+  if (deckUnsub) deckUnsub();
+  deckUnsub = deckId ? onValue(r(`decks/${les.cid}/${deckId}`), (s) => { deck = s.val(); render(); }) : null;
+}
+let inkUnsubs = [];
+function watchInk() {
+  const k = stateKey(st);
+  if (k === key) return;
+  key = k; inkUnsubs.forEach((u) => u()); inkUnsubs = []; stage.ink.clear(); stage.showLaser(null);
+  if (!k) return;
+  const ref = r(`ink/${lid}/${k}`);
+  inkUnsubs.push(onChildAdded(ref, (s) => stage.ink.upsert(s.key, strokeFromDb(s.val()))));
+  inkUnsubs.push(onChildChanged(ref, (s) => stage.ink.upsert(s.key, strokeFromDb(s.val()))));
+  inkUnsubs.push(onChildRemoved(ref, (s) => stage.ink.remove(s.key)));
+}
+onValue(r(`live/${lid}`), (s) => {
+  st = s.val() || { mode: 'wait' };
+  watchDeck(); watchInk(); syncShare(); render();
+});
+onValue(r(`pointer/${lid}`), (s) => { const p = s.val(); stage.showLaser(p && p.k === key ? p : null); });
+
+/* 화면 공유 받기: WebRTC → 9초 안에 안 되면 우회 전송(이미지) */
+const rtcRef = r(`rtc/${lid}/${uid}`);
+let pc = null, shareId = null, rtcTimer = null, offerUnsub = null, tcUnsub = null, frameUnsub = null;
+function closePc() {
+  if (pc) { pc.close(); pc = null; }
+  if (offerUnsub) { offerUnsub(); offerUnsub = null; }
+  if (tcUnsub) { tcUnsub(); tcUnsub = null; }
+  videoReady = false; stage.video.srcObject = null;
+}
+function setRelay(on) {
+  if (on === relay) return;
+  relay = on;
+  const wantRef = r(`relay/${lid}/want/${uid}`);
+  if (on) {
+    set(wantRef, true).catch(() => {}); onDisconnect(wantRef).remove();
+    frameUnsub = onValue(r(`relay/${lid}/frame`), (s) => { const f = s.val(); if (f && f.d) stage.relayImg.src = f.d; });
+  } else {
+    remove(wantRef).catch(() => {});
+    if (frameUnsub) { frameUnsub(); frameUnsub = null; }
+    stage.relayImg.removeAttribute('src');
+  }
+  render();
+}
+function syncShare() {
+  const want = st.mode === 'screen' && st.sharing;
+  if (!want) { clearTimeout(rtcTimer); closePc(); setRelay(false); if (shareId) remove(rtcRef).catch(() => {}); shareId = null; return; }
+  if (st.shareId !== shareId) { shareId = st.shareId; closePc(); setRelay(false); requestRtc(); }
+}
+async function requestRtc() {
+  await set(rtcRef, { req: shareId, t: serverTimestamp() });
+  onDisconnect(rtcRef).remove();
+  clearTimeout(rtcTimer);
+  rtcTimer = setTimeout(() => { if (!pc || pc.connectionState !== 'connected') setRelay(true); }, 9000);
+  const myShare = shareId;
+  offerUnsub = onValue(r(`rtc/${lid}/${uid}/offer`), async (s) => {
+    const o = s.val();
+    if (!o || o.shareId !== myShare || pc) return;
+    const my = pc = new RTCPeerConnection({ iceServers });
+    my.ontrack = (e) => { stage.video.srcObject = e.streams[0] || new MediaStream([e.track]); stage.video.play().catch(() => {}); videoReady = true; render(); };
+    my.onicecandidate = (e) => { if (e.candidate) set(r(`rtc/${lid}/${uid}/sc/${Date.now()}${Math.random().toString(36).slice(2, 6)}`), e.candidate.toJSON()).catch(() => {}); };
+    my.onconnectionstatechange = () => {
+      if (pc !== my) return;
+      if (my.connectionState === 'connected') { clearTimeout(rtcTimer); setRelay(false); }
+      else if (my.connectionState === 'failed') setRelay(true);
+    };
+    await my.setRemoteDescription({ type: o.type, sdp: o.sdp });
+    const ans = await my.createAnswer();
+    await my.setLocalDescription(ans);
+    await set(r(`rtc/${lid}/${uid}/answer`), { type: ans.type, sdp: ans.sdp, shareId: myShare });
+    const seen = new Set();
+    tcUnsub = onValue(r(`rtc/${lid}/${uid}/tc`), (cs) => {
+      cs.forEach((c) => { if (!seen.has(c.key)) { seen.add(c.key); my.addIceCandidate(c.val()).catch(() => {}); } });
+    });
+  });
+}
+render();
+</script>
+</body>
+</html>
