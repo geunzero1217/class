@@ -651,11 +651,11 @@ function beep() {
 async function openPip(auto = false) {
   if (pipWin && !pipWin.closed) { if (!auto) pipWin.focus(); $('#pipHint').hidden = true; return false; }
   let w = null;
-  try { if (window.documentPictureInPicture) w = await documentPictureInPicture.requestWindow({ width: 340, height: 210 }); } catch (_) { w = null; }
+  try { if (window.documentPictureInPicture) w = await documentPictureInPicture.requestWindow({ width: 300, height: 160 }); } catch (_) { w = null; }
   if (!w && auto) return false;
   $('#pipHint').hidden = true;
   if (!w) {
-    w = window.open('', 'rosterPip', 'width=340,height=240');
+    w = window.open('', 'rosterPip', 'width=300,height=190');
     if (!w) { alert('팝업이 차단되었어요. 주소창 오른쪽에서 팝업을 허용해 주세요.'); return false; }
     w.document.open(); w.document.write('<!doctype html><meta charset="utf-8"><title>학생 현황</title><body></body>'); w.document.close();
   }

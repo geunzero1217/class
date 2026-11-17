@@ -256,18 +256,20 @@ textarea.bulk { width: 100%; min-height: 130px; resize: vertical; margin-top: 10
 @keyframes blink { 50% { box-shadow: 0 0 0 8px #3182f633; } }
 
 /* 작은 현황 창 (Picture-in-Picture) — 출석 전광판처럼 이름만, 초록 = 보는 중 / 빨강 = 안 봄 */
-.pip-page { margin: 0; background: #f9fafb; color: var(--ink); }
-#pip { padding: 10px 12px 12px; }
-.pv-head { display: flex; align-items: center; gap: 12px; font-size: 13px; font-weight: 600; color: var(--sub); margin-bottom: 8px; }
-.pv-c { display: inline-flex; align-items: center; gap: 5px; font-variant-numeric: tabular-nums; }
-.pv-c i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.pip-page { margin: 0; background: #fbfcfd; color: var(--ink); }
+/* 창 자체는 비쳐 보이게 할 수 없어서, 내용을 옅게(반투명 느낌) — 마우스를 올리면 진하게 */
+#pip { padding: 8px 10px 10px; opacity: .72; transition: opacity .2s; }
+.pip-page:hover #pip { opacity: 1; }
+.pv-head { display: flex; align-items: center; gap: 10px; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+.pv-c { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
+.pv-c i { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
 .pv-c.on i { background: var(--green); } .pv-c.off i { background: var(--red); }
 .pv-sp { flex: 1; }
-.pv-all { color: var(--muted); font-weight: 500; }
-.pv-grid { display: flex; flex-wrap: wrap; gap: 4px; }
-.pv-n { font-size: 13px; font-weight: 600; line-height: 1; padding: 6px 8px; border-radius: 6px; transition: background .3s, color .3s; }
-.pv-n.on { background: rgba(3, 178, 108, .12); color: var(--green-ink); }
-.pv-n.off { background: rgba(240, 68, 82, .10); color: var(--red-ink); }
+.pv-all { color: var(--gray); font-weight: 500; }
+.pv-grid { display: flex; flex-wrap: wrap; gap: 3px; }
+.pv-n { font-size: 11px; font-weight: 600; line-height: 1; padding: 4px 6px; border-radius: 5px; transition: background .3s, color .3s; }
+.pv-n.on { background: rgba(3, 178, 108, .08); color: rgba(2, 138, 84, .85); }
+.pv-n.off { background: rgba(240, 68, 82, .07); color: rgba(228, 41, 57, .85); }
 .pv-n.flash { animation: pvflash .6s ease 4; }
 @keyframes pvflash { 50% { background: rgba(240, 68, 82, .45); color: #fff; } }
 .pv-empty { font-size: 13px; color: var(--muted); }
