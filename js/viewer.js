@@ -53,7 +53,7 @@ export function mountViewer({ lid, cid, uid, stage, onStatus = () => {} }) {
   /* 화면 공유 받기: WebRTC(영상) → 10초 안에 안 되면 안내를 띄우고 8초 뒤 다시 시도 (계속 반복)
      선생님이 '사진 보내기'를 켜 두었으면 그동안 사진(우회 전송)으로 보여 줌 */
   const rtcRef = r(`rtc/${lid}/${uid}`);
-  let pc = null, shareId = null, rtcTimer = null, offerUnsub = null, tcUnsub = null, frameUnsub = null, attempt = 0, discTimer = null;
+  let tryAt = 0, pc = null, shareId = null, rtcTimer = null, offerUnsub = null, tcUnsub = null, frameUnsub = null, attempt = 0, discTimer = null;
   function closePc() {
     if (pc) { pc.close(); pc = null; }
     if (offerUnsub) { offerUnsub(); offerUnsub = null; }
@@ -84,16 +84,20 @@ export function mountViewer({ lid, cid, uid, stage, onStatus = () => {} }) {
     if (st.shareId !== shareId) { shareId = st.shareId; attempt = 0; rtcFail = false; closePc(); setRelay(false); requestRtc(); }
     else setRelay(rtcFail && !!st.relay);   // 선생님이 '사진 보내기'를 켜거나 끈 경우
   }
-  function onRtcFail(myShare, myN) {
+  // 데이터(LTE)·핫스팟처럼 느린 망은 연결에 10초 넘게 걸릴 수 있음 → 아직 연결 시도 중이면 최대 30초까지 기다림
+  function onRtcFail(myShare, myN, force) {
     if (stopped || shareId !== myShare || attempt !== myN) return;
     if (pc && pc.connectionState === 'connected') return;
+    if (!force && pc && (pc.connectionState === 'connecting' || pc.connectionState === 'new') && Date.now() - tryAt < 30000) {
+      clearTimeout(rtcTimer); rtcTimer = setTimeout(() => onRtcFail(myShare, myN), 4000); return;
+    }
     rtcFail = true; videoReady = false;
     setRelay(!!st.relay); render();
     clearTimeout(rtcTimer);
     rtcTimer = setTimeout(() => { if (!stopped && shareId === myShare && attempt === myN) requestRtc(); }, 8000);
   }
   async function requestRtc() {
-    const myShare = shareId, myN = ++attempt;
+    const myShare = shareId, myN = ++attempt; tryAt = Date.now();
     closePc(); render();
     await remove(rtcRef).catch(() => {});
     if (stopped || shareId !== myShare || attempt !== myN) return;
@@ -112,8 +116,8 @@ export function mountViewer({ lid, cid, uid, stage, onStatus = () => {} }) {
         const cs = my.connectionState;
         clearTimeout(discTimer);
         if (cs === 'connected') { clearTimeout(rtcTimer); rtcFail = false; videoReady = !!stage.video.srcObject; setRelay(false); render(); }
-        else if (cs === 'failed') onRtcFail(myShare, myN);
-        else if (cs === 'disconnected') discTimer = setTimeout(() => { if (pc === my && my.connectionState !== 'connected') onRtcFail(myShare, myN); }, 5000);
+        else if (cs === 'failed') onRtcFail(myShare, myN, true);
+        else if (cs === 'disconnected') discTimer = setTimeout(() => { if (pc === my && my.connectionState !== 'connected') onRtcFail(myShare, myN, true); }, 15000);
       };
       await my.setRemoteDescription({ type: o.type, sdp: o.sdp });
       const ans = await my.createAnswer();
