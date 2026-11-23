@@ -20,6 +20,8 @@
       <button data-mode="board" data-ic="board">칠판</button>
     </span>
     <span class="spacer"></span>
+    <button id="sendFileBtn" data-ic="clip" title="고른 파일을 이 수업의 학생들에게 보내요 (학생 화면 위쪽에 내려받기 버튼이 생겨요)">파일 보내기</button>
+    <input id="sendIn" type="file" multiple hidden>
     <button id="pipBtn" data-ic="pin" title="PowerPoint 등 다른 프로그램 위에도 떠 있는 작은 학생 현황 창">학생 현황 창</button>
     <button id="endBtn" class="danger" data-ic="stop" title="수업을 끝내고 출석을 마감해요">수업 종료</button>
   </div>
@@ -108,9 +110,10 @@
       <div class="roster-head">
         <div class="counts" id="counts"></div>
         <div class="small muted" id="dispInfo" hidden></div>
+        <button id="pracBtn" class="prac-btn" data-ic="tool" title="학생들이 실습하러 다른 프로그램으로 가도 이탈로 세지 않아요">실습 모드 켜기</button>
+        <div class="sent-files" id="sentFiles" hidden></div>
         <div class="roster-opts">
           <label><input type="checkbox" id="optSort" checked> 이탈 학생 위로</label>
-          <label><input type="checkbox" id="optSound" checked> 알림음</label>
           <a href="#" id="resetCnt">화면 표시 초기화</a>
         </div>
       </div>
@@ -413,10 +416,12 @@ $('#optRelay').onchange = () => {
   updateShareInfo();
 };
 // 크롬은 마이크 권한이 있는 페이지에서만 PC의 진짜 내부 주소를 알려 줌 → 같은 와이파이 학생과 직접 연결이 쉬워짐 (소리는 안 씀)
+let micOk = false;
+try { navigator.permissions.query({ name: 'microphone' }).then((q) => { const f = () => { micOk = q.state === 'granted'; $('#micBtn').hidden = micOk; updateShareInfo(); }; f(); q.onchange = f; }).catch(() => {}); } catch (_) { /* */ }
 $('#micBtn').onclick = async () => {
   try {
     const s = await navigator.mediaDevices.getUserMedia({ audio: true });
-    s.getTracks().forEach((t) => t.stop());
+    s.getTracks().forEach((t) => t.stop()); micOk = true; $('#micBtn').hidden = true;
     toast('설정했어요. 학생들은 자동으로 다시 연결을 시도해요. (마이크 소리는 쓰지 않아요)', 5000);
   } catch (_) { toast('마이크 권한이 허용되지 않았어요. 주소창 왼쪽 자물쇠 → 마이크 → 허용', 5000); }
 };
@@ -432,9 +437,7 @@ async function onRtc(s) {
     p = { pc, shareId: v.req, n: v.n || 0, answered: false, seen: new Set() };
     peers.set(uid, p);
     stream.getTracks().forEach((t) => pc.addTrack(t, stream));
-    pc.getSenders().forEach((snd) => {
-      try { const prm = snd.getParameters(); prm.degradationPreference = 'maintain-resolution'; if (!prm.encodings || !prm.encodings.length) prm.encodings = [{}]; prm.encodings[0].maxBitrate = 2_500_000; snd.setParameters(prm).catch(() => {}); } catch (_) { /* */ }
-    });
+    tuneSenders();
     pc.onicecandidate = (e) => { if (e.candidate) set(r(`rtc/${lid}/${uid}/tc/${Date.now()}${Math.random().toString(36).slice(2, 6)}`), e.candidate.toJSON()).catch(() => {}); };
     pc.onconnectionstatechange = () => updateShareInfo();
     const offer = await pc.createOffer();
@@ -445,20 +448,38 @@ async function onRtc(s) {
     p.answered = true;
     try { await p.pc.setRemoteDescription({ type: v.answer.type, sdp: v.answer.sdp }); } catch (_) { /* */ }
   }
-  if (p.answered && v.sc) for (const [k, c] of Object.entries(v.sc)) if (!p.seen.has(k)) { p.seen.add(k); p.pc.addIceCandidate(c).catch(() => {}); }
+  if (p.answered && v.sc) for (const [k, c] of Object.entries(v.sc)) if (!p.seen.has(k)) { p.seen.add(k); const my = p; my.pc.addIceCandidate(c).catch(() => my.seen.delete(k)); }
+}
+/* 학생이 많으면 한 명당 보내는 양을 줄임 (선생님 PC의 무선 랜 업로드·처리량이 모자라 일부 학생이 끊기는 것 방지)
+   전체 약 25Mbps 안에서 나눔: 10명 2.5Mbps, 20명 1.25Mbps, 30명 0.8Mbps · 12명 넘으면 초당 10장 */
+function tuneSenders() {
+  const n = Math.max(1, peers.size);
+  const br = Math.round(Math.max(700e3, Math.min(2.5e6, 25e6 / n))), fps = n > 12 ? 10 : 15;
+  peers.forEach((p) => p.pc.getSenders().forEach((snd) => {
+    try {
+      const prm = snd.getParameters(); prm.degradationPreference = 'maintain-resolution';
+      if (!prm.encodings || !prm.encodings.length) prm.encodings = [{}];
+      if (prm.encodings[0].maxBitrate === br && prm.encodings[0].maxFramerate === fps) return;
+      prm.encodings[0].maxBitrate = br; prm.encodings[0].maxFramerate = fps;
+      snd.setParameters(prm).catch(() => {});
+    } catch (_) { /* */ }
+  }));
 }
 onChildAdded(r('rtc/' + lid), onRtc);
 onChildChanged(r('rtc/' + lid), onRtc);
-onChildRemoved(r('rtc/' + lid), (s) => { const p = peers.get(s.key); if (p) { p.pc.close(); peers.delete(s.key); } updateShareInfo(); });
+onChildRemoved(r('rtc/' + lid), (s) => { const p = peers.get(s.key); if (p) { p.pc.close(); peers.delete(s.key); tuneSenders(); } updateShareInfo(); });
 
 // 우회 전송: WebRTC가 막힌 학생이 있을 때만, 1.2초마다 화면 사진을 Firebase로
 let relayWant = 0;
 onValue(r(`relay/${lid}/want`), (s) => { relayWant = s.size || 0; if (relayWant > 0 && stream && st.relay) startRelay(); else stopRelay(); updateShareInfo(); });
 function updateShareInfo() {
   if (!stream) return;
-  const all = [...peers.values()], n = all.filter((p) => p.pc.connectionState === 'connected').length;
+  const all = [...peers.entries()], n = all.filter(([, p]) => p.pc.connectionState === 'connected').length;
   const bad = all.length - n;
-  $('#shareInfo').textContent = `공유 중 · 영상 연결 ${n}명` + (bad ? ` · 연결 중/안 됨 ${bad}명` : '')
+  // 영상이 안 되는 학생 이름 (자리 모니터는 '모니터')
+  const badNames = all.filter(([, p]) => p.pc.connectionState !== 'connected').map(([u]) => (members[u] ? members[u].name || members[u].sid : '모니터'));
+  $('#shareInfo').textContent = `공유 중 · 영상 연결 ${n}명` + (bad ? ` · 연결 중/안 됨 ${bad}명 (${badNames.slice(0, 6).join(', ')}${badNames.length > 6 ? ' 외' : ''})` : '')
+    + (bad && !micOk ? ' · 안 되면 [영상 연결 돕기]를 눌러 보세요' : '')
     + (relayWant && st.relay ? ` · 사진 전송 ${relayWant}명` : '')
     + (relayBytes > 1e6 ? ` (지금까지 약 ${Math.round(relayBytes / 1e6)}MB)` : '')
     + (relayCapped ? ' · 사진 전송 한도 도달로 멈춤' : '');
@@ -573,12 +594,12 @@ function recompute() {
     if (!m) { meta[s.sid] = m = { state, since: t, base: a.activeMs || 0, away: a.away || 0, shown: a.away || 0 }; continue; }
     if (m.state === state) continue;
     if (m.state === 'active') m.base += t - m.since;
-    if (m.state === 'active' && (state === 'away' || state === 'left')) { m.away++; m.shown++; newlyAway.push(s.sid); }
+    if (m.state === 'active' && (state === 'away' || state === 'left') && !st.practice) { m.away++; m.shown++; newlyAway.push(s.sid); }
     m.state = state; m.since = t;
     if (!ended) update(r(`att/${lid}/${skey(s.sid)}`), { activeMs: Math.round(m.base), away: m.away }).catch(() => {});
   }
   window._first = first;
-  if (newlyAway.length) { newlyAway.forEach((id) => flashIds.add(id)); beep(); setTimeout(() => { newlyAway.forEach((id) => flashIds.delete(id)); renderRoster(); }, 3200); }
+  if (newlyAway.length) { newlyAway.forEach((id) => flashIds.add(id)); setTimeout(() => { newlyAway.forEach((id) => flashIds.delete(id)); renderRoster(); }, 3200); }
   renderRoster();
 }
 // 시청 중인 시간은 30초마다 저장 (선생님 화면이 갑자기 닫혀도 대부분 남도록)
@@ -619,7 +640,9 @@ function renderRoster() {
   const list = rosterList(); const { c, html } = countsHtml(list);
   $('#counts').innerHTML = html;
   $('#rosterList').innerHTML = rosterItems(list);
-  document.title = (c.out ? `(${c.out}명 안 봄) ` : '') + (ended ? '수업 끝' : '수업 · ' + les.className);
+  const pb = $('#pracBtn');
+  pb.classList.toggle('on', !!st.practice); pb.innerHTML = ic('tool') + (st.practice ? '실습 모드 끄기 (이탈 안 셈)' : '실습 모드 켜기');
+  document.title = (st.practice ? '(실습 중) ' : c.out ? `(${c.out}명 안 봄) ` : '') + (ended ? '수업 끝' : '수업 · ' + les.className);
   const out = list.filter((s) => s.state === 'away' || s.state === 'left');
   $('#mini').innerHTML = `<div class="mc">${html}</div><ul>${(out.length ? out : list.filter((s) => s.state !== 'none')).slice(0, 40)
     .map((s) => `<li class="${s.state}"><i></i>${esc(s.name)}</li>`).join('')}</ul>`;
@@ -631,27 +654,23 @@ function renderPip(list) {
   if (!box) return;
   const seats = [...list].sort((a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric: true }));
   const on = seats.filter((s) => s.state === 'active').length;
-  box.innerHTML = `<div class="pv-head"><span class="pv-c on"><i></i>${on}</span><span class="pv-c off"><i></i>${seats.length - on}</span><span class="pv-sp"></span><span class="pv-all">${seats.length}명${dispN ? ` · 모니터 ${dispN}` : ''}</span></div>
+  box.classList.toggle('prac', !!st.practice);
+  box.innerHTML = `<div class="pv-head"><span class="pv-c on"><i></i>${on}</span><span class="pv-c off"><i></i>${seats.length - on}</span><span class="pv-sp"></span><span class="pv-all">${seats.length}명${dispN ? ` · 모니터 ${dispN}` : ''}</span>
+    <button class="pv-prac${st.practice ? ' on' : ''}" title="실습 모드: 학생이 다른 프로그램으로 가도 이탈로 세지 않아요">${st.practice ? '실습 중 · 끄기' : '실습 모드'}</button></div>
     <div class="pv-grid">${seats.map((s) => `<span class="pv-n ${s.state === 'active' ? 'on' : 'off'}${flashIds.has(s.id) ? ' flash' : ''}">${esc(s.name)}</span>`).join('')
     || '<span class="pv-empty">등록된 학생이 없어요</span>'}</div>`;
-  d.title = `보는 중 ${on} / ${seats.length}`;
+  d.title = st.practice ? '실습 중' : `보는 중 ${on} / ${seats.length}`;
 }
 setInterval(renderRoster, 10000);
 $('#optSort').onchange = renderRoster;
-$('#resetCnt').onclick = (e) => { e.preventDefault(); Object.values(meta).forEach((m) => (m.shown = 0)); renderRoster(); toast('화면의 이탈 표시만 0으로 했어요 (출석 기록은 그대로).'); };
-
-let audioCtx = null;
-document.addEventListener('pointerdown', () => { if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (_) { /* */ } } }, { once: true });
-function beep() {
-  if (!$('#optSound').checked || !audioCtx) return;
-  const t = audioCtx.currentTime;
-  [0, 0.18].forEach((dt) => {
-    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
-    o.frequency.value = 880; o.connect(g); g.connect(audioCtx.destination);
-    g.gain.setValueAtTime(0.0001, t + dt); g.gain.exponentialRampToValueAtTime(0.25, t + dt + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + dt + 0.14);
-    o.start(t + dt); o.stop(t + dt + 0.15);
-  });
+/* 실습 모드: 학생이 따라 하려고 다른 프로그램으로 가도 이탈 횟수를 세지 않음 (학생 화면에도 '실습 시간' 안내) */
+function togglePractice() {
+  setState({ practice: !st.practice });
+  toast(st.practice ? '실습 모드: 학생이 다른 창으로 가도 이탈로 세지 않아요' : '실습 모드를 껐어요. 이제부터 다시 이탈을 세요');
+  renderRoster();
 }
+$('#pracBtn').onclick = togglePractice;
+$('#resetCnt').onclick = (e) => { e.preventDefault(); Object.values(meta).forEach((m) => (m.shown = 0)); renderRoster(); toast('화면의 이탈 표시만 0으로 했어요 (출석 기록은 그대로).'); };
 
 /* 📌 다른 프로그램 위에 떠 있는 학생 목록 창 */
 // auto = 화면 공유 시작과 함께 자동으로 여는 경우 (항상 위에 뜨는 창을 못 만들면 조용히 넘어가고 안내만 띄움)
@@ -671,6 +690,7 @@ async function openPip(auto = false) {
   w.document.head.appendChild(link);
   w.document.body.className = 'pip-page';
   w.document.body.innerHTML = '<div id="pip"></div>';
+  w.document.body.addEventListener('click', (e) => { if (e.target.closest('.pv-prac')) togglePractice(); });
   w.addEventListener('pagehide', () => { if (pipWin === w) pipWin = null; });
   pipWin = w; renderRoster();
   return true;
@@ -678,6 +698,52 @@ async function openPip(auto = false) {
 $('#pipBtn').onclick = () => openPip();
 $('#pipHintBtn').onclick = () => openPip();
 $('#pipHintX').onclick = () => ($('#pipHint').hidden = true);
+
+/* ───────── 파일 보내기 ─────────
+   Firebase 무료 요금제는 파일 저장소(Storage)를 못 써서, 파일을 잘게 나눠 데이터베이스에 넣음.
+   files/{lid}/{fid} = {name,size,type,n}, filedata/{lid}/{fid}/c{i} = base64 조각, fileget/{lid}/{fid}/{uid} = 받은 학생 */
+const FILE_LIMIT = 20e6, CHUNK = 600000;
+function toB64(u8) { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); }
+const fmtSize = (b) => (b >= 1e6 ? (b / 1e6).toFixed(1) + 'MB' : Math.max(1, Math.round(b / 1e3)) + 'KB');
+let sentFiles = {}, fileGets = {}, sending = false;
+async function sendFiles(list) {
+  if (sending || ended) return; sending = true;
+  const btn = $('#sendFileBtn');
+  try {
+    for (const f of list) {
+      if (f.size > FILE_LIMIT) { toast(`${f.name}: ${FILE_LIMIT / 1e6}MB보다 큰 파일은 보낼 수 없어요`, 5000); continue; }
+      const fid = push(r('files/' + lid)).key;
+      const u8 = new Uint8Array(await f.arrayBuffer());
+      const n = Math.max(1, Math.ceil(u8.length / CHUNK));
+      for (let i = 0; i < n; i++) {
+        btn.textContent = `보내는 중 ${Math.round((i / n) * 100)}%`;
+        await set(r(`filedata/${lid}/${fid}/c${i}`), toB64(u8.subarray(i * CHUNK, (i + 1) * CHUNK)));
+      }
+      await set(r(`files/${lid}/${fid}`), { name: f.name, size: f.size, type: f.type || '', n, t: serverTimestamp() });
+      toast(`보냈어요: ${f.name}`);
+    }
+  } catch (er) { toast('보내지 못했어요: ' + er.message, 5000); }
+  finally { sending = false; btn.innerHTML = ic('clip') + '파일 보내기'; }
+}
+$('#sendFileBtn').onclick = () => $('#sendIn').click();
+$('#sendIn').onchange = () => { const l = [...$('#sendIn').files]; $('#sendIn').value = ''; if (l.length) sendFiles(l); };
+function renderSent() {
+  const ids = Object.keys(sentFiles).sort((a, b) => (sentFiles[a].t || 0) - (sentFiles[b].t || 0));
+  const box = $('#sentFiles'); box.hidden = !ids.length;
+  const total = Object.keys(roster).length;
+  box.innerHTML = '<div class="sf-h">보낸 파일</div>' + ids.map((id) => {
+    const f = sentFiles[id], got = new Set(Object.keys(fileGets[id] || {}).map((u) => (members[u] ? members[u].sid : u))).size;
+    return `<div class="sf"><span class="sf-n" title="${esc(f.name)}">${esc(f.name)}</span><span class="sf-m">${fmtSize(f.size)} · 받음 ${got}${total ? '/' + total : ''}</span><button class="sf-x" data-fid="${id}" title="학생 화면에서 지우기">${ic('x')}</button></div>`;
+  }).join('');
+}
+onValue(r('files/' + lid), (s) => { sentFiles = s.val() || {}; renderSent(); });
+onValue(r('fileget/' + lid), (s) => { fileGets = s.val() || {}; renderSent(); });
+onValue(r('members/' + lid), () => renderSent());
+$('#sentFiles').onclick = (e) => {
+  const b = e.target.closest('.sf-x'); if (!b) return;
+  const fid = b.dataset.fid;
+  update(r(''), { [`files/${lid}/${fid}`]: null, [`filedata/${lid}/${fid}`]: null, [`fileget/${lid}/${fid}`]: null }).catch((er) => toast(er.message));
+};
 
 /* 수업 코드 크게 보기 / 종료 */
 $('#codePill').onclick = () => {

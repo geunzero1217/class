@@ -100,7 +100,7 @@ export async function closeLesson(lid) {
   if (!l) return;
   const u = {
     [`lessons/${lid}/status`]: 'closed', [`lessons/${lid}/closedAt`]: serverTimestamp(),
-    [`live/${lid}`]: null, [`ink/${lid}`]: null, [`pointer/${lid}`]: null, [`rtc/${lid}`]: null, [`relay/${lid}`]: null, [`presence/${lid}`]: null, [`displays/${lid}`]: null,
+    [`live/${lid}`]: null, [`ink/${lid}`]: null, [`pointer/${lid}`]: null, [`rtc/${lid}`]: null, [`relay/${lid}`]: null, [`presence/${lid}`]: null, [`displays/${lid}`]: null, [`files/${lid}`]: null, [`filedata/${lid}`]: null, [`fileget/${lid}`]: null,
   };
   if (l.code) u[`codes/${l.code}`] = null;
   await clearCurrentIf(lid, u);
@@ -109,7 +109,7 @@ export async function closeLesson(lid) {
 export async function deleteLesson(lid) {
   const l = (await get(r('lessons/' + lid))).val();
   const u = { [`lessons/${lid}`]: null, [`members/${lid}`]: null, [`att/${lid}`]: null, [`live/${lid}`]: null, [`ink/${lid}`]: null,
-    [`pointer/${lid}`]: null, [`rtc/${lid}`]: null, [`relay/${lid}`]: null, [`presence/${lid}`]: null, [`displays/${lid}`]: null };
+    [`pointer/${lid}`]: null, [`rtc/${lid}`]: null, [`relay/${lid}`]: null, [`presence/${lid}`]: null, [`displays/${lid}`]: null, [`files/${lid}`]: null, [`filedata/${lid}`]: null, [`fileget/${lid}`]: null };
   if (l && l.code && l.status === 'open') u[`codes/${l.code}`] = null;
   await clearCurrentIf(lid, u);
   await update(r(''), u);

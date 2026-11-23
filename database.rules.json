@@ -140,6 +140,32 @@
           ".write": "auth != null && auth.uid === $uid && ((root.child('displayKey').exists() && root.child('viewers').child(auth.uid).val() === root.child('displayKey').val()) && root.child('current').child('lid').val() === $lid)"
         }
       }
+    },
+    "files": {
+      ".read": "auth != null && root.child('teachers').child(auth.uid).exists()",
+      ".write": "auth != null && root.child('teachers').child(auth.uid).exists()",
+      "$lid": {
+        ".read": "auth != null && (root.child('teachers').child(auth.uid).exists() || root.child('members').child($lid).child(auth.uid).exists())"
+      }
+    },
+    "filedata": {
+      ".read": "auth != null && root.child('teachers').child(auth.uid).exists()",
+      ".write": "auth != null && root.child('teachers').child(auth.uid).exists()",
+      "$lid": {
+        ".read": "auth != null && (root.child('teachers').child(auth.uid).exists() || root.child('members').child($lid).child(auth.uid).exists())"
+      }
+    },
+    "fileget": {
+      ".read": "auth != null && root.child('teachers').child(auth.uid).exists()",
+      ".write": "auth != null && root.child('teachers').child(auth.uid).exists()",
+      "$lid": {
+        "$fid": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && root.child('members').child($lid).child(auth.uid).exists()",
+            ".validate": "newData.isBoolean()"
+          }
+        }
+      }
     }
   }
 }

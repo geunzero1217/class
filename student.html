@@ -16,7 +16,8 @@
     <button id="fsBtn" class="small" data-ic="expand">전체 화면</button>
     <button id="logoutBtn" class="small" data-ic="logout">나가기</button>
   </div>
-  <div class="notice">이 화면을 벗어나면(다른 탭·창으로 이동) 선생님께 표시됩니다.</div>
+  <div class="notice" id="notice">이 화면을 벗어나면(다른 탭·창으로 이동) 선생님께 표시됩니다.</div>
+  <div class="files-bar" id="filesBar" hidden></div>
   <div class="student-stage"><div id="stageWrap" style="flex:1;display:grid"></div></div>
 </div>
 <script src="js/common.js"></script>
@@ -67,6 +68,50 @@ $('#logoutBtn').onclick = async () => {
   cleanup(); await signOut(auth); toJoin();
 };
 $('#fsBtn').onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {}); };
+
+/* 실습 모드: 다른 프로그램으로 가도 괜찮다는 안내 */
+onValue(r(`live/${lid}/practice`), (s) => {
+  const on = !!s.val(), n = $('#notice');
+  n.classList.toggle('prac', on);
+  n.textContent = on ? '실습 시간이에요. 다른 프로그램으로 가서 따라 해도 괜찮아요.' : '이 화면을 벗어나면(다른 탭·창으로 이동) 선생님께 표시됩니다.';
+});
+
+/* 선생님이 보낸 파일 → 위쪽 버튼으로 내려받기 */
+const fmtSize = (b) => (b >= 1e6 ? (b / 1e6).toFixed(1) + 'MB' : Math.max(1, Math.round(b / 1e3)) + 'KB');
+let files = {}, firstLoad = true;
+const seenFiles = new Set(), gotFiles = new Set(JSON.parse(sessionStorage.getItem('gotFiles:' + lid) || '[]'));
+function renderFiles() {
+  const ids = Object.keys(files).sort((a, b) => (files[a].t || 0) - (files[b].t || 0));
+  const bar = $('#filesBar'); bar.hidden = !ids.length;
+  const fresh = ids.filter((id) => !seenFiles.has(id));
+  bar.innerHTML = '<span class="fb-h">선생님이 보낸 파일</span>' + ids.map((id) => {
+    const f = files[id];
+    return `<button data-fid="${id}" class="${gotFiles.has(id) ? 'got' : ''}${!firstLoad && fresh.includes(id) ? ' new' : ''}">${ic(gotFiles.has(id) ? 'check' : 'download')}<span class="fb-n">${esc(f.name)}</span><span class="fb-s">${fmtSize(f.size)}</span></button>`;
+  }).join('');
+  if (!firstLoad && fresh.length) toast('선생님이 파일을 보냈어요. 위쪽 버튼을 눌러 내려받으세요.', 5000);
+  fresh.forEach((id) => seenFiles.add(id)); firstLoad = false;
+}
+onValue(r('files/' + lid), (s) => { files = s.val() || {}; renderFiles(); });
+$('#filesBar').onclick = async (e) => {
+  const b = e.target.closest('button[data-fid]'); if (!b || b.disabled) return;
+  const fid = b.dataset.fid, f = files[fid]; if (!f) return;
+  b.disabled = true; const old = b.innerHTML; b.innerHTML = '받는 중…';
+  try {
+    const v = (await get(r(`filedata/${lid}/${fid}`))).val() || {};
+    const parts = [];
+    for (let i = 0; i < f.n; i++) {
+      const bin = atob(v['c' + i] || ''); const u8 = new Uint8Array(bin.length);
+      for (let j = 0; j < bin.length; j++) u8[j] = bin.charCodeAt(j);
+      parts.push(u8);
+    }
+    const url = URL.createObjectURL(new Blob(parts, { type: f.type || 'application/octet-stream' }));
+    const a = document.createElement('a'); a.href = url; a.download = f.name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    gotFiles.add(fid); try { sessionStorage.setItem('gotFiles:' + lid, JSON.stringify([...gotFiles])); } catch (_) { /* */ }
+    set(r(`fileget/${lid}/${fid}/${uid}`), true).catch(() => {});
+  } catch (er) { alert('내려받지 못했어요: ' + er.message); }
+  b.disabled = false; b.innerHTML = old; renderFiles();
+};
 
 /* 선생님 화면 (화면 상태·슬라이드·필기·화면 공유 받기는 js/viewer.js) */
 const stage = new Stage($('#stageWrap'));
