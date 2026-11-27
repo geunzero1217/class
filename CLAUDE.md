@@ -36,11 +36,12 @@
 ### 데이터 모양 (Realtime Database)
 ```
 teachers/{uid}                 선생님 (구글). 아무도 없을 때 처음 로그인한 계정이 자동 등록
+teacherInvites/{이메일}         선생님으로 추가할 구글 계정 이메일 (소문자, '.' → ','). 그 계정이 처음 로그인하면 teachers 에 자동 등록 (규칙이 email_verified + 초대 확인). 2026-11-27 사용자 학교 계정 2개 추가함 (목록은 CLI로 확인, 공개 저장소라 여기 안 적음)
 classes/{cid}                  {name, created}
 rosters/{cid}/s{학번}          {sid, name, n(공백 뺀 이름)}   ← 키 앞에 's' (숫자 키가 배열로 바뀌는 것 방지)
 decks/{cid}/{did}              {name, pages:[{w,h}], created}
 slides/{did}/p{i}              JPEG dataURL (1600px, q0.75)
-lessons/{lid}                  {cid, className, date, period, code, status:'open'|'closed', openedAt, closedAt, lateMin}
+lessons/{lid}                  {cid, className, date, period, code, status:'open'|'closed', openedAt, closedAt, lateMin, memo(수업 메모·진도: 관리 화면 수업 목록의 '수업 메모')}
 codes/{code}                   lid (열린 수업만)
 members/{lid}/{uid}            학생 입장 {sid, n, name, at(서버시각)} — 규칙이 명단(n)과 대조
 presence/{lid}/{uid}           {s:'active'|'away', t} (onDisconnect 로 삭제)

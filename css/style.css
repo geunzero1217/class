@@ -112,6 +112,10 @@ b, strong { font-weight: 700; }
 .lesson-row { display: flex; gap: 10px; align-items: center; padding: 14px 16px; border-radius: 14px; background: var(--fill); flex-wrap: wrap; }
 .lesson-row.open { background: var(--brand-bg); }
 .lesson-row .when { font-weight: 700; min-width: 140px; }
+.memo-view { flex-basis: 100%; white-space: pre-wrap; font-size: 14px; line-height: 1.55; color: var(--sub); background: #fff; border-radius: 10px; padding: 9px 12px; cursor: pointer; }
+.memo-view::before { content: '메모'; display: inline-block; font-size: 11px; font-weight: 700; color: var(--brand); background: var(--brand-bg); border-radius: 5px; padding: 1px 6px; margin-right: 8px; vertical-align: 1px; }
+.memo-edit { flex-basis: 100%; display: grid; gap: 8px; }
+.memo-edit textarea { width: 100%; resize: vertical; background: #fff; font-size: 14px; line-height: 1.5; }
 .live-dot { display: inline-flex; align-items: center; gap: 6px; color: var(--green-ink); font-weight: 600; }
 .live-dot::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
 .st { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 700; }

@@ -239,8 +239,10 @@ async function tabLessons() {
         <span class="spacer"></span>
         ${l.status === 'open' ? `<a href="teacher.html?l=${l.id}" target="_blank"><button class="primary small">수업 화면</button></a>` : ''}
         <button class="small" data-att="${l.id}">출석 보기</button>
+        <button class="small" data-memo="${l.id}">${ic('edit')}수업 메모</button>
         ${l.status === 'open' ? `<button class="small" data-close="${l.id}">종료</button>` : `<button class="small" data-reopen="${l.date}|${l.period}">다시 열기</button>`}
         <button class="small danger" data-ldel="${l.id}">삭제</button>
+        <div class="memo-view" data-mv="${l.id}" ${l.memo ? '' : 'hidden'} title="누르면 고치기">${esc(l.memo || '')}</div>
       </div>`; }).join('') || '<div class="muted">아직 연 수업이 없어요. 위에서 날짜와 교시를 고르고 수업을 여세요.</div>'}
     </div>`;
   // 지금 시각에 맞는 교시를 미리 골라 둠 (보통 시간표: 8:40, 9:40, 10:40, 11:40, 13:30, 14:30, 15:30 시작)
@@ -259,6 +261,29 @@ async function tabLessons() {
     await deleteLesson(b.dataset.ldel); tabLessons();
   }));
   $$('[data-att]').forEach((b) => (b.onclick = () => showAttendance(b.dataset.att)));
+  // 수업 메모 (진도·다음 시간에 할 것 등). lessons/{lid}/memo
+  const memoOf = Object.fromEntries(lessons.map((l) => [l.id, l.memo || '']));
+  const editMemo = (lid) => {
+    const view = $(`[data-mv="${lid}"]`), row = view.parentElement;
+    const open = row.querySelector('.memo-edit');
+    if (open) { open.querySelector('textarea').focus(); return; }
+    const box = document.createElement('div'); box.className = 'memo-edit';
+    box.innerHTML = `<textarea rows="3" placeholder="예) 3단원 2절 p.45까지 / 다음 시간: 실습 2번부터"></textarea>
+      <div class="row"><button class="primary small" data-ms>저장</button><button class="small" data-mc>취소</button><span class="small muted">Ctrl+Enter 저장</span></div>`;
+    row.appendChild(box); view.hidden = true;
+    const ta = box.querySelector('textarea'); ta.value = memoOf[lid]; ta.focus();
+    const close = () => { box.parentNode.removeChild(box); view.textContent = memoOf[lid]; view.hidden = !memoOf[lid]; };
+    const save = async () => {
+      const v = ta.value.trim().slice(0, 2000);
+      try { await set(r(`lessons/${lid}/memo`), v || null); memoOf[lid] = v; close(); toast(v ? '메모를 저장했어요' : '메모를 지웠어요'); }
+      catch (er) { alert('저장하지 못했어요: ' + er.message); }
+    };
+    box.querySelector('[data-ms]').onclick = save;
+    box.querySelector('[data-mc]').onclick = close;
+    ta.onkeydown = (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) save(); if (e.key === 'Escape') close(); };
+  };
+  $$('[data-memo]').forEach((b) => (b.onclick = () => editMemo(b.dataset.memo)));
+  $$('[data-mv]').forEach((v) => (v.onclick = () => editMemo(v.dataset.mv)));
 }
 async function startLesson(date, period, lessons) {
   const open = lessons.find((l) => l.status === 'open');

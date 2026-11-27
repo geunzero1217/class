@@ -6,7 +6,7 @@
       ".read": "auth != null && root.child('teachers').child(auth.uid).exists()",
       "$uid": {
         ".read": "auth != null && auth.uid === $uid",
-        ".write": "auth != null && auth.token.firebase.sign_in_provider === 'google.com' && (root.child('teachers').child(auth.uid).exists() || (!root.child('teachers').exists() && auth.uid === $uid))"
+        ".write": "auth != null && auth.token.firebase.sign_in_provider === 'google.com' && (root.child('teachers').child(auth.uid).exists() || (!root.child('teachers').exists() && auth.uid === $uid) || (auth.uid === $uid && auth.token.email_verified === true && root.child('teacherInvites').child(auth.token.email.toLowerCase().replace('.', ',')).exists()))"
       }
     },
     "classes": {
@@ -166,6 +166,10 @@
           }
         }
       }
+    },
+    "teacherInvites": {
+      ".read": "auth != null && root.child('teachers').child(auth.uid).exists()",
+      ".write": "auth != null && root.child('teachers').child(auth.uid).exists()"
     }
   }
 }
